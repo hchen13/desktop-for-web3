@@ -30,7 +30,11 @@ dist-ssr
 # Test output and temporary files
 tests/screenshots
 .playwright-mcp
+.codebuddy
 tmp
+scripts
+test-results.txt
+test-summary.md
 *.tmp
 temp
 
@@ -39,6 +43,7 @@ temp
 .env.local
 .env.*.local
 .mcp.json
+.mcp.json.example
 *.key
 *.pem
 *.crx
@@ -46,6 +51,8 @@ temp
 # Local scripts (not for sharing)
 push-to-github.sh
 setup-github.md
+idea.md
+tutorial
 
 # Worker specific
 worker/node_modules
