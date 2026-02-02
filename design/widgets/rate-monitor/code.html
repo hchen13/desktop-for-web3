@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Terminal Rate Widget - Swap Focus</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "terminal-blue": "#00A3FF",
+                        "terminal-orange": "#FF9900",
+                        "carbon-black": "#050505",
+                        "ui-border": "#232c48",
+                    },
+                    fontFamily: {
+                        "display": ["Work Sans", "sans-serif"]
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        .widget-fixed-size {
+            width: 100px;
+            height: 100px;
+        }
+        .text-micro {
+            font-size: 7px;
+            line-height: 1;
+        }
+        .text-currency {
+            font-size: 10px;
+        }
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin-slow 3s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-[#101522] font-display flex items-center justify-center min-h-screen">
+<div class="widget-fixed-size bg-carbon-black border border-ui-border rounded-lg relative flex flex-col items-center justify-between p-1.5 overflow-hidden shadow-2xl">
+<div class="absolute top-1.5 left-1.5 flex items-center gap-0.5">
+<span class="material-symbols-outlined text-terminal-orange !text-[8px] animate-spin-slow">
+                sync
+            </span>
+<span class="text-terminal-orange text-micro font-bold tracking-tighter uppercase">Syncing</span>
+</div>
+<div class="h-2 w-full"></div>
+<div class="w-full flex items-center justify-between px-0.5 gap-0.5 mt-1">
+<div class="flex-1 bg-ui-border/30 rounded-sm py-0.5 flex items-center justify-center">
+<span class="text-white text-currency font-medium tracking-tighter">USDT</span>
+</div>
+<button class="flex items-center justify-center hover:bg-terminal-orange/20 rounded-full transition-colors p-0.5">
+<span class="material-symbols-outlined text-terminal-orange !text-[12px] font-bold">
+                    sync_alt
+                </span>
+</button>
+<div class="flex-1 bg-ui-border/30 rounded-sm py-0.5 flex items-center justify-center">
+<span class="text-white text-currency font-medium tracking-tighter">CNY</span>
+</div>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center w-full">
+<h1 class="text-terminal-blue text-[22px] font-bold leading-none tracking-tighter">7.24</h1>
+</div>
+<div class="w-full border-t border-ui-border/50 pt-1">
+<p class="text-[#92a0c9] text-micro text-center uppercase font-medium tracking-widest">Live Rate</p>
+</div>
+</div>
+
+</body></html>

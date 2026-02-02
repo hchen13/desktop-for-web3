@@ -1,0 +1,57 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node modules
+node_modules
+
+# Build output
+build
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Test output and temporary files
+tests/screenshots
+.playwright-mcp
+tmp
+*.tmp
+temp
+
+# Environment and secret files
+.env
+.env.local
+.env.*.local
+.mcp.json
+*.key
+*.pem
+*.crx
+
+# Local scripts (not for sharing)
+push-to-github.sh
+setup-github.md
+
+# Worker specific
+worker/node_modules
+worker/.dev.vars
+worker/.wrangler
+worker/dist
+
+# IDE specific
+.codebuddy

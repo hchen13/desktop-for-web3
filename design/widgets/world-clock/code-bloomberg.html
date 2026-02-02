@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Day/Night Terminal World Clock</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style type="text/tailwindcss">
+        :root {
+            --terminal-black: #080808;
+            --terminal-blue: #00AAFF;
+            --terminal-orange: #FF9900;
+            --terminal-border: #1a2a3a;
+            --day-tint: #0a1118;
+            --night-tint: #080808;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .terminal-widget {
+            background-color: var(--terminal-black);
+            border: 1.5px solid var(--terminal-border);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "terminal-blue": "#00AAFF",
+                        "terminal-orange": "#FF9900",
+                        "carbon": "#080808",
+                        "day-navy": "#0a1118"
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-[#121212] flex items-center justify-center min-h-screen">
+<div class="relative w-[316px] h-[158px] rounded-[16px] terminal-widget flex flex-col overflow-hidden">
+<div class="flex items-center justify-between px-4 pt-3 pb-2 border-b border-[#1a1a1a]">
+<span class="text-[9px] uppercase tracking-[0.15em] text-white/40 font-bold">World Clock</span>
+<div class="flex items-center gap-1.5">
+<div class="w-1.5 h-1.5 rounded-full bg-terminal-orange"></div>
+<span class="text-[9px] font-bold text-terminal-orange uppercase tracking-wider">Live</span>
+</div>
+</div>
+<div class="flex flex-1 items-stretch divide-x divide-[#1a1a1a]">
+<div class="flex-1 flex flex-col items-center justify-center p-2 text-center bg-[var(--night-tint)]">
+<div class="flex items-center gap-1 mb-2">
+<h2 class="text-xl font-bold text-terminal-blue leading-none tracking-tight">03:45</h2>
+<span class="material-symbols-outlined text-terminal-blue text-[14px]">dark_mode</span>
+</div>
+<div class="space-y-0.5">
+<p class="text-[11px] font-semibold text-white uppercase tracking-tight">New York</p>
+<p class="text-[9px] text-white/40 font-medium">-5H TODAY</p>
+</div>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center p-2 text-center bg-[var(--day-tint)]">
+<div class="flex items-center gap-1 mb-2">
+<h2 class="text-xl font-bold text-terminal-blue leading-none tracking-tight">08:45</h2>
+<span class="material-symbols-outlined text-terminal-orange text-[14px]">light_mode</span>
+</div>
+<div class="space-y-0.5">
+<p class="text-[11px] font-semibold text-white uppercase tracking-tight">London</p>
+<p class="text-[9px] text-white/40 font-medium">+0H TODAY</p>
+</div>
+</div>
+<div class="flex-1 flex flex-col items-center justify-center p-2 text-center bg-[var(--day-tint)]">
+<div class="flex items-center gap-1 mb-2">
+<h2 class="text-xl font-bold text-terminal-blue leading-none tracking-tight">17:45</h2>
+<span class="material-symbols-outlined text-terminal-orange text-[14px]">light_mode</span>
+</div>
+<div class="space-y-0.5">
+<p class="text-[11px] font-semibold text-white uppercase tracking-tight">Tokyo</p>
+<p class="text-[9px] text-white/40 font-medium">+9H TODAY</p>
+</div>
+</div>
+</div>
+<div class="h-[3px] bg-terminal-orange w-full opacity-80"></div>
+</div>
+<div class="hidden">
+<img data-alt="Abstract dark digital earth map background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALhDW8QDQHyBYRdDw5q80lD3FeixTa4-N75gegg5UAizrdTtnqW8BbszY59_MFcgidKGC-pF6nZNqt3SZsjLxMJBm7QBbyg-RD_cKvF8aJwtZSJAxFzoTC8QfPHU2zhFk37A1RzVOeWr8JyhysazBZNWv-iFtGi3KZHCqzvQ8ZnNVq8lUhOax6TopcWgsCT7dQjOFZI3ZK0ym-qw3cGyo8wM4PChVSyxQK4BvUHUK3j_Htag4jlh-qyniAvkOB2lJE2zhU6JRy-8U"/>
+</div>
+
+</body></html>

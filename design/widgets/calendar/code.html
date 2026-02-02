@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Refined Chinese Terminal Calendar</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style type="text/tailwindcss">
+        :root {
+            --terminal-bg: #0a0b0d;
+            --terminal-blue: #0095ff;
+            --terminal-orange: #FF9900;
+            --grid-line: rgba(255, 255, 255, 0.12);
+            --text-dim: rgba(255, 255, 255, 0.4);
+            --cyan-glow: rgba(0, 149, 255, 0.05);
+            --border-radius: 16px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #040506;
+            position: relative;
+            overflow: hidden;
+        }
+        .bg-glow {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--cyan-glow) 0%, rgba(0, 0, 0, 0) 60%);
+            z-index: -1;
+        }
+        .terminal-container {
+            width: 316px;
+            height: 208px;
+            background: var(--terminal-bg);
+            border: 1px solid #1c1f24;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-radius: var(--border-radius);
+            box-sizing: border-box;
+            position: relative;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            grid-template-rows: auto repeat(6, 1fr);
+            flex-grow: 1;
+            border-top: 1px solid var(--grid-line);
+        }
+        .day-label {
+            color: var(--text-dim);
+            font-size: 10px;
+            font-weight: 700;
+            text-align: center;
+            padding: 4px 0;
+            border-right: 1px solid var(--grid-line);
+            border-bottom: 1px solid var(--grid-line);
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .day-label:last-child {
+            border-right: none;
+        }
+        .date-cell {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.9);
+            border-right: 1px solid var(--grid-line);
+            border-bottom: 1px solid var(--grid-line);
+            box-sizing: border-box;
+        }
+        .date-cell:nth-child(7n) {
+            border-right: none;
+        }.date-cell:nth-last-child(-n+7) {
+            border-bottom: none;
+        }
+        .date-cell.other-month {
+            color: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.15);
+        }
+        .current-day {
+            background: var(--terminal-blue);
+            color: #fff !important;
+            font-weight: 700;
+        }
+        .event-count {
+            position: absolute;
+            top: 1px;
+            right: 2px;
+            font-size: 8px;
+            font-weight: 700;
+            color: var(--terminal-orange);
+            line-height: 1;
+        }
+        .material-symbols-outlined {
+            font-size: 14px !important;
+        }
+    </style>
+</head>
+<body>
+<div class="bg-glow"></div>
+<div class="terminal-container shadow-2xl">
+<div class="flex items-center justify-between px-4 h-8 bg-[#14171a]">
+<div class="flex items-center gap-2">
+<h2 class="text-white font-bold text-[11px] tracking-wide">2026年1月</h2>
+</div>
+<div class="flex items-center gap-3">
+<button class="text-[var(--text-dim)] hover:text-white flex items-center">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="text-[var(--text-dim)] hover:text-white flex items-center">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="calendar-grid">
+<div class="day-label">日</div>
+<div class="day-label">一</div>
+<div class="day-label">二</div>
+<div class="day-label">三</div>
+<div class="day-label">四</div>
+<div class="day-label">五</div>
+<div class="day-label">六</div>
+<div class="date-cell other-month">28</div>
+<div class="date-cell other-month">29</div>
+<div class="date-cell other-month">30</div>
+<div class="date-cell other-month">31</div>
+<div class="date-cell">1</div>
+<div class="date-cell">2<span class="event-count">2</span></div>
+<div class="date-cell">3</div>
+<div class="date-cell">4</div>
+<div class="date-cell">5</div>
+<div class="date-cell">6</div>
+<div class="date-cell">7<span class="event-count">5</span></div>
+<div class="date-cell">8</div>
+<div class="date-cell">9</div>
+<div class="date-cell">10</div>
+<div class="date-cell">11</div>
+<div class="date-cell">12</div>
+<div class="date-cell">13</div>
+<div class="date-cell">14</div>
+<div class="date-cell">15</div>
+<div class="date-cell">16<span class="event-count">3</span></div>
+<div class="date-cell">17</div>
+<div class="date-cell">18</div>
+<div class="date-cell">19</div>
+<div class="date-cell">20</div>
+<div class="date-cell current-day">21<span class="event-count" style="color:white">1</span></div>
+<div class="date-cell">22</div>
+<div class="date-cell">23</div>
+<div class="date-cell">24</div>
+<div class="date-cell">25</div>
+<div class="date-cell">26</div>
+<div class="date-cell">27</div>
+<div class="date-cell">28</div>
+<div class="date-cell">29</div>
+<div class="date-cell">30</div>
+<div class="date-cell">31</div>
+<div class="date-cell other-month">1</div>
+<div class="date-cell other-month">2</div>
+<div class="date-cell other-month">3</div>
+<div class="date-cell other-month">4</div>
+<div class="date-cell other-month">5</div>
+<div class="date-cell other-month">6</div>
+<div class="date-cell other-month">7</div>
+</div>
+<div class="h-1 bg-[#0a0b0d]"></div>
+</div>
+
+</body></html>

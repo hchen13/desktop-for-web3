@@ -1,0 +1,595 @@
+.chain-monitor-widget {
+  background: #0a0b0d;
+  border: 1px solid #1c1f24;
+  border-radius: var(--radius-lg);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.chain-monitor-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+}
+
+.chain-monitor-loading .spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  animation: chain-monitor-spin 0.8s linear infinite;
+}
+
+@keyframes chain-monitor-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chain-monitor-loading-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Chain Selector */
+.chain-selector {
+  position: relative;
+}
+
+.chain-selector__trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+
+.chain-selector__trigger:hover {
+  opacity: 0.8;
+}
+
+.chain-selector__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.chain-selector__name {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.chain-selector__chevron {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
+.chain-selector__users-badge {
+  display: none;
+}
+
+.chain-selector__users-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.chain-selector__users-text {
+  font-size: 10px;
+}
+
+.chain-selector__icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chain-selector__icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.chain-selector__dropdown {
+  position: fixed;
+  background: #1A1B23;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 200px;
+  z-index: 10000;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+}
+
+.chain-selector__dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chain-selector__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.chain-selector__option:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chain-selector__option--selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chain-selector__option-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chain-selector__option-icon-img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.chain-selector__option-name {
+  flex: 1;
+  font-size: 12px;
+  color: #FFFFFF;
+}
+
+/* EVM Chain Card */
+.chain-monitor-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.chain-monitor-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin: 0;
+  min-height: 32px;
+  padding: 12px 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chain-monitor-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.chain-monitor-card__users-badge {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: static;
+  white-space: nowrap;
+}
+
+.chain-monitor-card__users-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 1;
+  animation: breathe 2s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.chain-monitor-card__users-text {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Metrics Grid */
+.chain-monitor-card__metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  padding: 0;
+}
+
+.chain-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 8px 8px 16px;
+  position: relative;
+}
+
+.chain-metric__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+  position: relative;
+  height: 20px;
+  min-height: 20px;
+}
+
+.chain-metric__icon {
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  filter: brightness(0) invert(1) opacity(0.4);
+  flex-shrink: 0;
+}
+
+.chain-metric::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chain-metric:nth-child(2n)::after {
+  display: none;
+}
+
+.chain-metric::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  bottom: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chain-metric:nth-child(n+3)::before {
+  display: none;
+}
+
+.chain-metric__label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.5px;
+  line-height: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.chain-metric__value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.chain-metric__value {
+  font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.chain-metric__unit {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.chain-metric__unit--sol {
+  font-size: 9px;
+}
+
+.chain-metric__change {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chain-metric__change--positive {
+  color: #00FFA3;
+}
+
+.chain-metric__change--negative {
+  color: #FF4444;
+}
+
+/* Progress Bar */
+.chain-monitor-card__progress {
+  display: flex;
+  height: 3px;
+  overflow: hidden;
+  gap: 0;
+  flex-shrink: 0;
+  margin-top: auto;
+  margin-left: -12px;
+  margin-right: -12px;
+  margin-bottom: 0;
+  width: calc(100% + 24px);
+  position: relative;
+  z-index: 10;
+}
+
+.chain-monitor-card__progress-segment {
+  height: 100%;
+}
+
+/* BTC Card */
+.chain-monitor-card--btc {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.chain-monitor-card__header--btc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin: 0;
+  min-height: 32px;
+  padding: 12px 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chain-monitor-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+
+.chain-monitor-card__header-left:hover {
+  opacity: 0.8;
+}
+
+.chain-monitor-card__btc-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chain-monitor-card__btc-icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.chain-monitor-card__btc-name {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.chain-monitor-card__chevron {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
+.chain-monitor-card__indicators {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0;
+}
+
+.chain-monitor-card__fees {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 8px 8px 16px;
+  grid-column: 1 / -1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chain-monitor-card__fees-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+  position: relative;
+  height: 20px;
+  min-height: 20px;
+}
+
+.chain-monitor-card__fees-icon {
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  filter: brightness(0) invert(1) opacity(0.4);
+  flex-shrink: 0;
+}
+
+.chain-monitor-card__fees-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.chain-monitor-card__fees-value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.chain-monitor-card__fees-value {
+  font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 21px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.chain-monitor-card__fees-unit {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.chain-monitor-card__bottom-left,
+.chain-monitor-card__bottom-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 8px 8px 16px;
+  position: relative;
+}
+
+.chain-monitor-card__bottom-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+  position: relative;
+  height: 20px;
+  min-height: 20px;
+}
+
+.chain-monitor-card__bottom-icon {
+  width: 20px;
+  height: 20px;
+  opacity: 1;
+  filter: brightness(0) invert(1) opacity(0.4);
+  flex-shrink: 0;
+}
+
+.chain-monitor-card__bottom-left::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chain-monitor-card__bottom-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.chain-monitor-card__bottom-value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.chain-monitor-card__bottom-value {
+  font-family: 'Roboto Mono', 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.chain-monitor-card__bottom-unit {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.chain-monitor-card__bottom-status {
+  font-size: 9px;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.chain-monitor-card__progress--btc {
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0;
+}

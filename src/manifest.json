@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Desktop for Web3",
+  "version": "0.1.0",
+  "description": "iOS-style new tab page for Web3 enthusiasts",
+  "chrome_url_overrides": {
+    "newtab": "src/newtab/index.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://api.binance.com/*",
+    "https://www.binance.com/*",
+    "https://api.binance.us/*",
+    "https://www.binance.us/*",
+    "wss://stream.binance.com:9443/*",
+    "wss://stream.binance.us:9443/*",
+    "https://www.imf.org/*",
+    "https://widgets.tradingview-widget.com/*",
+    "https://api.theblockbeats.news/*",
+    "https://rss.odaily.news/*",
+    "https://cointelegraph.com/*",
+    "https://www.coindesk.com/*",
+    "https://api.allorigins.win/*",
+    "https://corsproxy.io/*",
+    "https://api.rss2json.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https: data: blob:"
+  }
+}

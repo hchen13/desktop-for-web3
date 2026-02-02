@@ -1,0 +1,20 @@
+name = "desktop-for-web3-api-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# 开发环境配置
+[env.development]
+name = "desktop-for-web3-api-proxy-dev"
+
+# 生产环境配置
+[env.production]
+name = "desktop-for-web3-api-proxy"
+
+# 环境变量在 Cloudflare Dashboard 中设置
+# 或使用: wrangler secret put <KEY_NAME>
+#
+# 需要设置的 secrets:
+# - DUNE_API_KEY
+# - ETHERSCAN_API_KEY
+# - COINMARKETCAP_API_KEY
+# - COINMARKETCAL_API_KEY

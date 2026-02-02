@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style type="text/tailwindcss">
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+            animation: spin 2s linear infinite;
+        }
+        :root {
+            --bloomberg-orange: #FF9900;
+            --carbon-black: #0a0a0a;
+            --terminal-blue: #5e81ac;
+        }
+        .hover-state {
+            background-color: rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+        .hover-state::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: var(--bloomberg-orange);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#FF9900",
+                        "background-dark": "#0a0a0a",
+                        "terminal-blue": "#5e81ac",
+                    },
+                    fontFamily: {
+                        "sans": ["Inter", "system-ui", "sans-serif"]
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-gray-100 dark:bg-[#121212] font-sans flex items-center justify-center min-h-screen">
+<div class="w-[340px] h-[340px] bg-background-dark rounded-[16px] border border-white/10 flex flex-col overflow-hidden relative shadow-2xl">
+<header class="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/40 shrink-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl">rss_feed</span>
+<h2 class="text-white text-[14px] font-bold tracking-wide">Web3 资讯</h2>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+<span class="material-symbols-outlined text-[12px] text-primary animate-spin-slow" style="font-variation-settings: 'wght' 700;">progress_activity</span>
+<span class="text-primary text-[10px] font-bold tracking-[0.05em]">SYNCING</span>
+</div>
+</header>
+<div class="flex-1 overflow-hidden flex flex-col">
+<div class="px-4 py-3 hover-state">
+<div class="flex gap-2 mb-1.5">
+<div class="flex h-[16px] items-center justify-center rounded-[4px] bg-primary px-1.5">
+<p class="text-background-dark text-[9px] font-bold leading-none tracking-tight">CRYPTO</p>
+</div>
+</div>
+<p class="text-white text-[13px] font-bold leading-tight line-clamp-2 mb-1.5">以太坊 Layer 2 网络总锁仓量突破历史新高</p>
+<div class="flex justify-between items-center text-white/40 text-[10px] font-medium uppercase">
+<span>REUTERS</span>
+<span>2分钟前</span>
+</div>
+</div>
+<div class="h-px bg-white/5 mx-4"></div>
+<div class="px-4 py-3 opacity-90">
+<div class="flex gap-2 mb-1.5">
+<div class="flex h-[16px] items-center justify-center rounded-[4px] bg-primary px-1.5">
+<p class="text-background-dark text-[9px] font-bold leading-none tracking-tight">MACRO</p>
+</div>
+</div>
+<p class="text-white text-[13px] font-bold leading-tight line-clamp-2 mb-1.5">Bitcoin ETFs See Record Inflows as Market Rallies</p>
+<div class="flex justify-between items-center text-white/40 text-[10px] font-medium uppercase">
+<span>BLOOMBERG</span>
+<span>5分钟前</span>
+</div>
+</div>
+<div class="h-px bg-white/5 mx-4"></div>
+<div class="px-4 py-3 opacity-90">
+<div class="flex gap-2 mb-1.5">
+<div class="flex h-[16px] items-center justify-center rounded-[4px] bg-primary px-1.5">
+<p class="text-background-dark text-[9px] font-bold leading-none tracking-tight">DEFI</p>
+</div>
+</div>
+<p class="text-white text-[13px] font-bold leading-tight line-clamp-2 mb-1.5">主流去中心化交易所发布 V4 版本路线图</p>
+<div class="flex justify-between items-center text-white/40 text-[10px] font-medium uppercase">
+<span>COINDESK</span>
+<span>12分钟前</span>
+</div>
+</div>
+<div class="h-px bg-white/5 mx-4"></div>
+<div class="px-4 py-3 opacity-90">
+<div class="flex gap-2 mb-1.5">
+<div class="flex h-[16px] items-center justify-center rounded-[4px] bg-primary px-1.5">
+<p class="text-background-dark text-[9px] font-bold leading-none tracking-tight">MARKETS</p>
+</div>
+</div>
+<p class="text-white text-[13px] font-bold leading-tight line-clamp-2 mb-1.5">Stablecoin Volume Reaches Two-Year High in Q1</p>
+<div class="flex justify-between items-center text-white/40 text-[10px] font-medium uppercase">
+<span>WSJ</span>
+<span>18分钟前</span>
+</div>
+</div>
+</div>
+<div class="absolute inset-0 pointer-events-none bg-gradient-to-b from-white/[0.03] to-transparent h-20 w-full"></div>
+</div>
+
+</body></html>

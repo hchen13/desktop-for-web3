@@ -1,0 +1,488 @@
+/* 主布局 */
+.main-layout {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xl);
+  background: var(--bg-root);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 时间显示 - Grid 元素内 */
+.time-display {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-sm);
+}
+
+.time-display__time {
+  font-size: 52px;
+  font-weight: 300;
+  color: var(--text-primary);
+  font-feature-settings: "tnum";
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.time-display__hours,
+.time-display__minutes {
+  font-variant-numeric: tabular-nums;
+}
+
+.time-display__colon {
+  font-variant-numeric: tabular-nums;
+  transition: opacity 0.15s ease;
+  margin: 0 1px;
+}
+
+.time-display__date {
+  font-size: 18px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* 搜索栏容器 - Grid 元素内 */
+.search-bar-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 50px;
+  padding: 0 16px;
+  /* 深色毛玻璃 - 与 sidebar 相同透明度 */
+  background: rgba(20, 22, 26, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: var(--radius-lg);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.search-bar:hover {
+  background: rgba(30, 33, 38, 0.10);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.search-bar__icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.search-bar__input {
+  flex: 1;
+  margin-left: 8px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.search-bar__input::placeholder {
+  color: var(--text-tertiary);
+  font-size: 16px;
+}
+
+/* 覆盖浏览器 autofill 样式 */
+.search-bar__input:-webkit-autofill,
+.search-bar__input:-webkit-autofill:hover,
+.search-bar__input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px transparent inset;
+  transition: background-color 5000s ease-in-out 0s;
+  caret-color: var(--text-primary);
+}
+
+.search-bar__input::-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+}
+
+.search-bar__input::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: var(--text-primary);
+}
+
+.search-bar__suggestion {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  text-align: center;
+  font-size: 9px;
+  color: var(--blue-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 三栏布局 */
+.three-column-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px 1fr 400px;
+  gap: var(--space-xl);
+  padding: var(--space-lg) 0;
+  overflow: hidden;
+}
+
+/* 左侧面板 */
+.left-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* 中间面板 */
+.center-panel {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  justify-content: center;
+}
+
+/* 右侧面板 */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 资讯卡片 - 可滚动区域 */
+.right-panel .panel-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.right-panel .news-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-sm);
+  margin: calc(var(--space-md) * -1);
+}
+
+/* 自定义滚动条 - 仅滚动时可见 */
+.right-panel .news-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.right-panel .news-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.right-panel .news-list::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.right-panel .news-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.right-panel .news-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* 面板卡片 - 使用面板背景色，不使用毛玻璃 */
+.panel-card {
+  padding: var(--space-md);
+  background: var(--bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-lg);
+}
+
+.panel-card__header {
+  padding-bottom: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.panel-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* 日历组件 - 样式已迁移至组件内联样式 */
+
+.calendar__date {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.calendar__day {
+  font-size: 48px;
+  font-weight: 300;
+  color: var(--text-primary);
+  font-feature-settings: "tnum";
+}
+
+.calendar__month {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.calendar__weekday {
+  margin-top: var(--space-sm);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* 资讯列表 */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.news-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.news-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.news-item__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.news-item__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  line-height: 1.4;
+}
+
+.news-item__time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.news-item__summary {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 价格列表 - 数字使用 tabular-nums 对齐 */
+.price-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.price-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) 0;
+}
+
+.price-item__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.price-item__price {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-left: auto;
+  margin-right: var(--space-md);
+  font-feature-settings: "tnum";
+}
+
+.price-item__change {
+  font-size: 12px;
+  font-feature-settings: "tnum";
+}
+
+.price-item__change--up {
+  color: var(--green-up);
+}
+
+.price-item__change--down {
+  color: var(--red-down);
+}
+
+/* 图标容器 */
+.icon-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  padding: var(--space-md) 0;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.icon-category {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.icon-category__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.icon-category__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 0;
+  order: 2;
+}
+
+/* 应用图标 - iOS 风格，不使用毛玻璃 */
+.app-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  cursor: pointer;
+}
+
+.app-icon:hover {
+}
+
+.app-icon__img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.app-icon__name {
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 56px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 响应式调整 */
+@media (max-width: 1200px) {
+  .three-column-layout {
+    grid-template-columns: 240px 1fr 360px;
+  }
+
+  .icon-category__grid {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+
+/* ============================================
+   右键菜单 (ContextMenu)
+   ============================================ */
+
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.context-menu__content {
+  pointer-events: auto;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--glass-bg);
+  border: var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+              0 2px 8px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.context-menu__item {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.context-menu__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.context-menu__item--danger {
+  color: #ff6b6b;
+}
+
+.context-menu__item--danger:hover {
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.context-menu__item--disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.context-menu__item--disabled:hover {
+  background: transparent;
+}

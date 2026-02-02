@@ -1,0 +1,927 @@
+{
+  "layouts": [
+    {
+      "id": "desktop-1",
+      "name": "主页",
+      "elements": [
+        {
+          "id": "widget-world-clock",
+          "type": "widget",
+          "component": "world-clock",
+          "position": { "x": -5, "y": 1 },
+          "size": { "width": 2, "height": 1 },
+          "state": {
+            "settings": {
+              "timezones": ["Asia/Shanghai", "America/New_York", "Europe/London"]
+            }
+          }
+        },
+        {
+          "id": "fixed-time",
+          "type": "fixed",
+          "component": "time",
+          "position": { "x": -5, "y": 0 },
+          "size": { "width": 2, "height": 1 },
+          "fixed": true,
+          "state": {}
+        },
+        {
+          "id": "fixed-search",
+          "type": "fixed",
+          "component": "search",
+          "position": { "x": -3, "y": 0 },
+          "size": { "width": 4, "height": 1 },
+          "fixed": true,
+          "state": {}
+        },
+        {
+          "id": "widget-news",
+          "type": "widget",
+          "component": "news",
+          "position": { "x": 1, "y": 2 },
+          "size": { "width": 3, "height": 3 },
+          "state": {
+            "settings": {
+              "source": "blockbeats",
+              "filter": "all"
+            }
+          }
+        },
+        {
+          "id": "widget-chain-monitor",
+          "type": "widget",
+          "component": "chain-monitor",
+          "position": { "x": -3, "y": 1 },
+          "size": { "width": 2, "height": 2 },
+          "state": {
+            "settings": {
+              "selectedChain": "eth"
+            }
+          }
+        },
+        {
+          "id": "widget-watchlist",
+          "type": "widget",
+          "component": "watchlist",
+          "position": { "x": -1, "y": 1 },
+          "size": { "width": 2, "height": 2 },
+          "state": {
+            "settings": {
+              "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+            }
+          }
+        },
+        {
+          "id": "widget-rate-monitor",
+          "type": "widget",
+          "component": "rate-monitor",
+          "position": { "x": -5, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "state": {
+            "settings": {
+              "stablecoin": "USDT",
+              "fiat": "CNY",
+              "swapped": false
+            }
+          }
+        },
+        {
+          "id": "icon-home-telegram",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Telegram", "url": "https://web.telegram.org", "category": "social" }
+        },
+        {
+          "id": "widget-calendar",
+          "type": "widget",
+          "component": "calendar",
+          "position": { "x": 1, "y": 0 },
+          "size": { "width": 3, "height": 2 },
+          "state": {
+            "settings": {
+              "view": "full"
+            }
+          }
+        },
+        {
+          "id": "icon-binance",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Binance", "url": "https://www.binance.com", "category": "cex" }
+        },
+        {
+          "id": "icon-coinbase",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Coinbase", "url": "https://www.coinbase.com", "category": "cex" }
+        },
+        {
+          "id": "icon-uniswap",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Uniswap", "url": "https://app.uniswap.org", "category": "dex" }
+        },
+        {
+          "id": "icon-home-hyperliquid",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Hyperliquid", "url": "https://hyperliquid.xyz", "category": "dex" }
+        },
+        {
+          "id": "icon-home-metamask",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "MetaMask", "url": "https://metamask.io", "category": "wallet" }
+        },
+        {
+          "id": "icon-home-dexscreener",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "DexScreener", "url": "https://dexscreener.com", "category": "tools" }
+        },
+        {
+          "id": "icon-home-chatgpt",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "ChatGPT", "url": "https://chatgpt.com", "category": "ai" }
+        },
+        {
+          "id": "icon-home-gemini",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Gemini", "url": "https://gemini.google.com", "category": "ai" }
+        },
+        {
+          "id": "icon-home-blockbeats",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "BlockBeats", "url": "https://www.theblockbeats.info", "category": "news" }
+        },
+        {
+          "id": "icon-home-twitter",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "X", "url": "https://x.com", "category": "social" }
+        }
+      ]
+    },
+    {
+      "id": "desktop-2",
+      "name": "交易所",
+      "elements": [
+        {
+          "id": "widget-watchlist-exchange",
+          "type": "widget",
+          "component": "watchlist",
+          "position": { "x": -3, "y": 0 },
+          "size": { "width": 2, "height": 2 },
+          "state": {
+            "settings": {
+              "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+            }
+          }
+        },
+        {
+          "id": "icon-exchange-binance",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Binance", "url": "https://www.binance.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-coinbase",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Coinbase", "url": "https://www.coinbase.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-upbit",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Upbit", "url": "https://upbit.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-okx",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "OKX", "url": "https://www.okx.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bybit",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bybit", "url": "https://www.bybit.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bitget",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bitget", "url": "https://www.bitget.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-gate",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Gate.io", "url": "https://www.gate.io", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-kucoin",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "KuCoin", "url": "https://www.kucoin.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-mexc",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "MEXC", "url": "https://www.mexc.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-htx",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "HTX", "url": "https://www.htx.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-crypto-com",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Crypto.com", "url": "https://crypto.com/exchange", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bitfinex",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bitfinex", "url": "https://www.bitfinex.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bingx",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "BingX", "url": "https://bingx.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-deribit",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Deribit", "url": "https://www.deribit.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bitmart",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "BitMart", "url": "https://www.bitmart.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-lbank",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "LBank", "url": "https://www.lbank.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bitstamp",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bitstamp", "url": "https://www.bitstamp.net", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bithumb",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bithumb", "url": "https://www.bithumb.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-xt",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "XT.COM", "url": "https://www.xt.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-bitflyer",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "bitFlyer", "url": "https://bitflyer.com", "category": "cex" }
+        },
+        {
+          "id": "icon-exchange-gemini",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Gemini", "url": "https://www.gemini.com", "category": "cex" }
+        },
+        {
+          "id": "widget-rate-monitor-exchange",
+          "type": "widget",
+          "component": "rate-monitor",
+          "position": { "x": 3, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "state": {
+            "settings": {
+              "stablecoin": "USDT",
+              "fiat": "CNY",
+              "swapped": false
+            }
+          }
+        },
+        {
+          "id": "icon-tool-tradingview",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 3, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "TradingView", "url": "https://www.tradingview.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-coinglass",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 3, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Coinglass", "url": "https://www.coinglass.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-coinmarketcap",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 3, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CoinMarketCap", "url": "https://coinmarketcap.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-coingecko",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 3, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CoinGecko", "url": "https://www.coingecko.com", "category": "tools" }
+        }
+      ]
+    },
+    {
+      "id": "desktop-3",
+      "name": "链上",
+      "elements": [
+        {
+          "id": "widget-chain-monitor-onchain",
+          "type": "widget",
+          "component": "chain-monitor",
+          "position": { "x": -5, "y": 0 },
+          "size": { "width": 2, "height": 2 },
+          "state": {
+            "settings": {
+              "selectedChain": "eth"
+            }
+          }
+        },
+        {
+          "id": "icon-wallet-metamask",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "MetaMask", "url": "https://metamask.io", "category": "wallet" }
+        },
+        {
+          "id": "icon-wallet-phantom",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Phantom", "url": "https://phantom.app", "category": "wallet" }
+        },
+        {
+          "id": "icon-wallet-binance",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Binance Wallet", "url": "https://www.bnbchain.org/en/learn/wallet", "category": "wallet" }
+        },
+        {
+          "id": "icon-wallet-okx",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "OKX Wallet", "url": "https://www.okx.com/web3", "category": "wallet" }
+        },
+        {
+          "id": "icon-wallet-bitget",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bitget Wallet", "url": "https://web3.bitget.com", "category": "wallet" }
+        },
+        {
+          "id": "icon-wallet-onekey",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 2, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "OneKey", "url": "https://onekey.so", "category": "wallet" }
+        },
+
+        {
+          "id": "icon-dex-uniswap",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Uniswap", "url": "https://app.uniswap.org", "category": "dex" }
+        },
+        {
+          "id": "icon-dex-pancakeswap",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "PancakeSwap", "url": "https://pancakeswap.finance", "category": "dex" }
+        },
+        {
+          "id": "icon-dex-1inch",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "1inch", "url": "https://1inch.com", "category": "dex" }
+        },
+        {
+          "id": "icon-dex-curve",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Curve", "url": "https://curve.fi", "category": "dex" }
+        },
+
+        {
+          "id": "icon-explorer-etherscan",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Etherscan", "url": "https://etherscan.io", "category": "explorer" }
+        },
+        {
+          "id": "icon-explorer-solscan",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Solscan", "url": "https://solscan.io", "category": "explorer" }
+        },
+        {
+          "id": "icon-explorer-polygonscan",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Polygonscan", "url": "https://polygonscan.com", "category": "explorer" }
+        },
+        {
+          "id": "icon-explorer-blockchain",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bitcoin Explorer", "url": "https://www.blockchain.com/explorer", "category": "explorer" }
+        },
+
+        {
+          "id": "icon-tool-dexscreener",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "DexScreener", "url": "https://dexscreener.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-defillama",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "DefiLlama", "url": "https://defillama.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-dune",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Dune", "url": "https://dune.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-tokenomist",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Tokenomist", "url": "https://tokenomist.ai", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-l2beat",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "L2BEAT", "url": "https://l2beat.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-coinmarketcal",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CoinMarketCal", "url": "https://coinmarketcal.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-debank",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "DeBank", "url": "https://debank.com", "category": "tools" }
+        },
+        {
+          "id": "icon-tool-nansen",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 2, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Nansen", "url": "https://www.nansen.ai", "category": "tools" }
+        },
+
+        {
+          "id": "icon-perp-hyperliquid",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Hyperliquid", "url": "https://hyperliquid.xyz", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-lighter",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Lighter", "url": "https://lighter.xyz", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-aster",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Aster", "url": "https://www.asterdex.com", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-edgex",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "edgeX", "url": "https://www.edgex.exchange", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-gtrade",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "gTrade", "url": "https://gains.trade", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-aevo",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Aevo", "url": "https://www.aevo.xyz", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-dydx",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "dYdX", "url": "https://dydx.exchange", "category": "perp" }
+        },
+        {
+          "id": "icon-perp-gmx",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 2, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "GMX", "url": "https://gmx.io", "category": "perp" }
+        },
+
+        {
+          "id": "icon-rwa-ondo",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 5 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Ondo Finance", "url": "https://ondo.finance", "category": "rwa" }
+        },
+        {
+          "id": "icon-rwa-maple",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 5 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Maple Finance", "url": "https://www.maple.finance", "category": "rwa" }
+        },
+        {
+          "id": "icon-rwa-paxos",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -3, "y": 5 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Paxos", "url": "https://paxos.com", "category": "rwa" }
+        },
+        {
+          "id": "icon-rwa-tgold",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 5 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Tether Gold", "url": "https://gold.tether.to", "category": "rwa" }
+        },
+        {
+          "id": "icon-rwa-xyz",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 5 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "rwa.xyz", "url": "https://www.rwa.xyz", "category": "rwa" }
+        },
+        {
+          "id": "icon-rwa-circle",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 5 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Circle", "url": "https://www.circle.com", "category": "rwa" }
+        }
+      ]
+    },
+    {
+      "id": "desktop-4",
+      "name": "资讯",
+      "elements": [
+        {
+          "id": "widget-econ-map",
+          "type": "widget",
+          "component": "econ-map",
+          "position": { "x": -5, "y": 0 },
+          "size": { "width": 3, "height": 2 },
+          "state": {
+            "settings": {}
+          }
+        },
+        {
+          "id": "widget-news-info",
+          "type": "widget",
+          "component": "news",
+          "position": { "x": -2, "y": 0 },
+          "size": { "width": 3, "height": 3 },
+          "state": {
+            "settings": {
+              "source": "blockbeats",
+              "filter": "all"
+            }
+          }
+        },
+
+        {
+          "id": "icon-news-coindesk",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CoinDesk", "url": "https://www.coindesk.com", "category": "crypto-news" }
+        },
+        {
+          "id": "icon-news-cointelegraph",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 2, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CoinTelegraph", "url": "https://cointelegraph.com", "category": "crypto-news" }
+        },
+        {
+          "id": "icon-news-theblock",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "The Block", "url": "https://www.theblock.co", "category": "crypto-news" }
+        },
+        {
+          "id": "icon-news-decrypt",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 2, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Decrypt", "url": "https://decrypt.co", "category": "crypto-news" }
+        },
+        {
+          "id": "icon-news-cryptopanic",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CryptoPanic", "url": "https://cryptopanic.com", "category": "crypto-news" }
+        },
+        {
+          "id": "icon-news-followin",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 2, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Followin", "url": "https://followin.io", "category": "crypto-news" }
+        },
+
+        {
+          "id": "icon-news-panews",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 3, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "PANews", "url": "https://www.panewslab.com", "category": "crypto-news-cn" }
+        },
+        {
+          "id": "icon-news-odaily",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 4, "y": 0 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Odaily", "url": "https://www.odaily.news", "category": "crypto-news-cn" }
+        },
+        {
+          "id": "icon-news-foresight",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 3, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Foresight", "url": "https://foresightnews.pro", "category": "crypto-news-cn" }
+        },
+        {
+          "id": "icon-news-blockbeats",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 4, "y": 1 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "BlockBeats", "url": "https://www.theblockbeats.info", "category": "crypto-news-cn" }
+        },
+
+        {
+          "id": "icon-finance-bloomberg",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Bloomberg", "url": "https://www.bloomberg.com", "category": "finance" }
+        },
+        {
+          "id": "icon-finance-reuters",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 2 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Reuters", "url": "https://www.reuters.com", "category": "finance" }
+        },
+        {
+          "id": "icon-finance-economist",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "The Economist", "url": "https://www.economist.com", "category": "finance" }
+        },
+        {
+          "id": "icon-finance-wsj",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "WSJ", "url": "https://www.wsj.com", "category": "finance" }
+        },
+        {
+          "id": "icon-finance-jin10",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -5, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "金十数据", "url": "https://www.jin10.com", "category": "finance" }
+        },
+        {
+          "id": "icon-finance-wallstreetcn",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -4, "y": 4 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "华尔街见闻", "url": "https://wallstreetcn.com", "category": "finance" }
+        },
+
+        {
+          "id": "icon-macro-te",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -2, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Trading Economics", "url": "https://tradingeconomics.com", "category": "macro" }
+        },
+        {
+          "id": "icon-macro-fred",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": -1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "FRED", "url": "https://fred.stlouisfed.org", "category": "macro" }
+        },
+        {
+          "id": "icon-macro-cme",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 0, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "CME FedWatch", "url": "https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html", "category": "macro" }
+        },
+        {
+          "id": "icon-macro-investing",
+          "type": "icon",
+          "component": "icon",
+          "position": { "x": 1, "y": 3 },
+          "size": { "width": 1, "height": 1 },
+          "data": { "name": "Investing.com", "url": "https://www.investing.com", "category": "macro" }
+        }
+      ]
+    }
+  ]
+}

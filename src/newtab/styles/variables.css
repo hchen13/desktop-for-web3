@@ -1,0 +1,85 @@
+:root {
+  /* Grid System 配置 */
+  /* --grid-unit 通过 JavaScript 动态设置，不在此硬编码 */
+  --grid-gap: 8px;
+  --grid-columns: 8;
+  --sidebar-width: 48px;
+  --grid-padding-left: 56px;
+  --grid-padding-right: 16px;
+  --grid-padding-y: 16px;
+  --fixed-area-height: 72px;
+
+  /* 背景色系统 - Bloomberg 风格深色模式 */
+  --bg-root: #1a1b1e;
+  --bg-panel: #0a0b0d;
+  --bg-elevated: #2d2f36;
+
+  /* 终端风格色彩 (Calendar Widget) */
+  --terminal-bg: #0a0b0d;
+  --terminal-header-bg: #14171a;
+  --terminal-blue: #0095ff;
+  --terminal-orange: #FF9900;
+  --terminal-grid-line: rgba(255, 255, 255, 0.12);
+  --terminal-text-dim: rgba(255, 255, 255, 0.4);
+  --terminal-text-primary: rgba(255, 255, 255, 0.9);
+  --terminal-container-border: #1c1f24;
+
+  /* 文本颜色 - 高对比度 */
+  --text-primary: #ffffff;
+  --text-secondary: #a8adb7;
+  --text-tertiary: #6b7280;
+
+  /* 语义色 - 金融数据风格 */
+  --green-up: #00d395;
+  --red-down: #ff4757;
+  --blue-main: #3b82f6;
+  --yellow-warn: #ffa502;
+
+  /* 兼容旧变量名 */
+  --color-up: #00d395;
+  --color-down: #ff4757;
+  --color-brand: #3b82f6;
+  --color-pump: #00d395;
+  --color-dump: #ff4757;
+
+  /* 圆角系统 - 符合设计规范 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* 阴影 - 极度克制 */
+  --shadow-subtle: 0 4px 24px rgba(0, 0, 0, 0.4);
+
+  /* 毛玻璃效果 - 有限使用（搜索框、悬浮层） */
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-bg-hover: rgba(255, 255, 255, 0.10);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(20px);
+
+  /* 间距 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  /* 字体 */
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+  --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
+  --font-size-base: 11px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  background: var(--bg-root);
+  color: var(--text-primary);
+}

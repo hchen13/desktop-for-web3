@@ -1,0 +1,18 @@
+{
+  "name": "desktop-for-web3-worker",
+  "version": "0.1.0",
+  "description": "Cloudflare Worker API proxy for Desktop for Web3 extension",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20231218.0",
+    "typescript": "^5.3.0",
+    "wrangler": "^3.19.0"
+  }
+}

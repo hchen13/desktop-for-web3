@@ -1,0 +1,214 @@
+.econ-map2-widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: var(--text-primary, #e5e5e5);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  --econ-map2-nodata: #251c14;
+}
+
+.econ-map2-widget__header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 8px 12px 6px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.econ-map2-widget__tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+  width: 100%;
+}
+
+.econ-map2-widget__tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: #8b8f97;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.econ-map2-widget__tab:hover {
+  color: #b1b6bf;
+}
+
+.econ-map2-widget__tab.is-active {
+  color: var(--accent, #ff9800);
+}
+
+/* Custom Dropdown Component - matches chain-monitor style */
+.econ-map2-widget__dropdown {
+  position: relative;
+}
+
+.econ-map2-widget__dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--accent, #ff9800);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+
+.econ-map2-widget__dropdown-trigger:hover {
+  opacity: 0.8;
+}
+
+.econ-map2-widget__dropdown-trigger:focus {
+  outline: none;
+}
+
+.econ-map2-widget__dropdown-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #ff9800);
+}
+
+.econ-map2-widget__dropdown-arrow {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 4px;
+  transition: transform 0.15s ease;
+}
+
+.econ-map2-widget__dropdown-arrow.open {
+  transform: rotate(180deg);
+}
+
+.econ-map2-widget__dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 140px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #1A1B23;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.econ-map2-widget__dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.econ-map2-widget__dropdown-item:hover {
+  background: rgba(255, 152, 0, 0.15);
+}
+
+.econ-map2-widget__dropdown-item.selected {
+  background: rgba(255, 152, 0, 0.2);
+  color: var(--accent, #ff9800);
+}
+
+.econ-map2-widget__map-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.econ-map2-widget__map {
+  width: 100%;
+  height: 100%;
+}
+
+.econ-map2-widget__country {
+  stroke: #000000;
+  stroke-width: 0.8;
+  transition: stroke 150ms ease, stroke-width 150ms ease;
+}
+
+.econ-map2-widget__country:hover {
+  stroke: #00A3FF;
+  stroke-width: 1.5;
+}
+
+.econ-map2-widget__tooltip {
+  position: absolute;
+  background: rgba(12, 15, 20, 0.95);
+  border: 1px solid var(--grid-border, #2a2f38);
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-primary, #e5e5e5);
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.econ-map2-widget__tooltip-name {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.econ-map2-widget__tooltip-metric {
+  font-size: 10px;
+  color: var(--text-secondary, #9aa0a6);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.econ-map2-widget__tooltip-value {
+  color: var(--accent, #ff9800);
+  font-family: monospace;
+}
+
+.econ-map2-widget__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 15, 20, 0.7);
+  z-index: 2;
+}
+
+.econ-map2-widget__loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--grid-border, #2a2f38);
+  border-top-color: var(--accent, #ff9800);
+  border-radius: 50%;
+  animation: econ-map2-spin 1s linear infinite;
+}
+
+@keyframes econ-map2-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
