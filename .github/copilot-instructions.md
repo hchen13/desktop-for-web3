@@ -25,3 +25,12 @@
 - Fixed elements are marked `fixed: true` and must not be draggable (see grid store + drag logic).
 - Avoid `console.log` in production code; when debugging, logs are prefixed by subsystem (e.g., `[EventOrchestrator]`, `[DragSystem]`) per [CLAUDE.md](CLAUDE.md).
 - Chain configuration (symbols, Dune namespaces, and CoinCap logos) is centralized in [src/config/chainMonitorConfig.ts](src/config/chainMonitorConfig.ts).
+
+## Security guidelines
+**CRITICAL: Never record complete sensitive information in any file:**
+- ❌ Full API keys, tokens, passwords, or secrets
+- ❌ Complete credentials in comments, docs, or commit messages
+- ✅ Use first 6-8 characters only for identification (e.g., `2d703765...`)
+- ✅ Use placeholders like `YOUR_API_KEY_HERE` or `$ENV_VAR_NAME`
+- ⚠️ Always add sensitive files to `.gitignore` BEFORE first commit
+- ⚠️ If secrets leak into git history, use `git filter-branch` to rewrite history immediately
