@@ -83,8 +83,6 @@ const BUILTIN_ICONS: IconMapping = {
   'apex.exchange': 'https://apex.exchange/favicon.ico',
 
   // AI 平台
-  'chat.openai.com': 'https://cdn.oaistatic.com/_next/static/media/apple-touch-icon.59f2e898.png',
-  'chatgpt.com': 'https://cdn.oaistatic.com/_next/static/media/apple-touch-icon.59f2e898.png',
   'claude.ai': 'https://claude.ai/images/favicon.png',
   'gemini.google.com': 'https://ssl.gstatic.com/images/branding/product/2x/gemini_48px.png',
   'kimi.moonshot.cn': 'https://kimi.moonshot.cn/favicon.ico',

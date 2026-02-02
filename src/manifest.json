@@ -11,7 +11,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage", "tabs", "favicon"],
   "host_permissions": [
     "https://api.binance.com/*",
     "https://www.binance.com/*",
@@ -30,6 +30,6 @@
     "https://api.rss2json.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https: data: blob:"
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https: data: blob: chrome-extension: ;"
   }
 }

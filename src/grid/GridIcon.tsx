@@ -1,53 +1,70 @@
 /**
  * Grid 中用户添加的图标组件
- * 支持全局缓存，跨 tab/session 复用加载状态
+ * 支持渐进式图标优化：所有源并发请求，谁回来就比较，更好的立即替换
  * 支持防止拖拽后的误点击
  */
 
-import { createSignal, Show, createEffect, onMount } from 'solid-js';
+import { createSignal, Show, createEffect, onCleanup } from 'solid-js';
 import { getDDGFavicon } from '../services/faviconService';
 import { DragSystem } from '../events/DragSystem';
-import { getCachedIconUrl, getIconLoadState, setIconLoadState, detectBestIcon } from '../services/iconCache';
+import { getCachedIconUrl, getIconLoadState, setIconLoadState, detectBestIcon, isStorageLoaded, onIconUpdate } from '../services/iconCache';
 
 interface GridIconProps {
   url: string;
   name: string;
 }
 
-const MIN_QUALITY_SIZE = 96;
-
 export const GridIcon = (props: GridIconProps) => {
-  // 从全局缓存获取 URL（同步，立即可用）
-  const [iconUrl, setIconUrl] = createSignal(getCachedIconUrl(props.url));
+  // 从缓存获取初始 URL
+  const initialUrl = getCachedIconUrl(props.url);
+  const [iconUrl, setIconUrl] = createSignal(initialUrl);
 
-  // 检查全局加载状态，如果已加载过则直接显示
+  // 全局加载状态
   const globalState = getIconLoadState(props.url);
   const [isLoading, setIsLoading] = createSignal(globalState !== 'loaded');
   const [hasLoaded, setHasLoaded] = createSignal(globalState === 'loaded');
   const [imageError, setImageError] = createSignal(false);
 
   // 本地状态：追踪实际图片元素是否已加载完成
-  // 即使全局缓存说已加载，新创建的 img 元素仍需重新加载
   const [isImgLoaded, setIsImgLoaded] = createSignal(false);
 
-  // 监听 URL 变化，更新图标
+  // 注册渐进式更新回调：当更好的图标被发现时立即更新
+  createEffect(() => {
+    const url = props.url;
+    
+    // 注册图标更新回调
+    const unsubscribe = onIconUpdate(url, (newIconUrl) => {
+      setIconUrl(newIconUrl);
+      setIsImgLoaded(false); // 新图片需要重新加载
+    });
+
+    // 清理回调
+    onCleanup(unsubscribe);
+  });
+
+  // 监听 URL 变化，触发图标检测
   createEffect((prevUrl) => {
     const url = props.url;
-    if (url === prevUrl) return prevUrl;
+    const storageReady = isStorageLoaded();
+    
+    // 如果有缓存，先使用缓存
+    const cachedUrl = getCachedIconUrl(url);
+    if (cachedUrl) {
+      setIconUrl(cachedUrl);
+    }
+    
+    if (url === prevUrl && !storageReady) return prevUrl;
 
     const state = getIconLoadState(url);
-    setIconUrl(getCachedIconUrl(url));
     setIsLoading(state !== 'loaded');
     setHasLoaded(state === 'loaded');
+    setIsImgLoaded(state === 'loaded');
     setImageError(false);
 
-    // 如果未检测过最佳图标，触发异步检测
-    if (state !== 'loaded' && state !== 'error') {
-      detectBestIcon(url).then(bestUrl => {
-        if (bestUrl && bestUrl !== getCachedIconUrl(url)) {
-          setIconUrl(bestUrl);
-        }
-      });
+    // 如果缓存已就绪且未完成检测，触发渐进式检测
+    // detectBestIcon 内部会通过 onIconUpdate 回调通知更好的图标
+    if (storageReady && state !== 'loaded' && state !== 'error') {
+      detectBestIcon(url);
     }
 
     return url;
@@ -69,23 +86,11 @@ export const GridIcon = (props: GridIconProps) => {
 
   const handleImageLoad = (e: Event) => {
     const img = e.target as HTMLImageElement;
-    const { naturalWidth, naturalHeight } = img;
 
     setIsLoading(false);
     setHasLoaded(true);
-    setIsImgLoaded(true); // 标记本地图片已加载
+    setIsImgLoaded(true);
     setIconLoadState(props.url, 'loaded');
-
-    // 尺寸不达标时检测更高质量版本
-    if (naturalWidth < MIN_QUALITY_SIZE || naturalHeight < MIN_QUALITY_SIZE) {
-      detectBestIcon(props.url).then(bestUrl => {
-        const current = getCachedIconUrl(props.url);
-        if (bestUrl && bestUrl !== current) {
-          setIconUrl(bestUrl);
-          setIsImgLoaded(false); // 新图片需要重新加载
-        }
-      });
-    }
   };
 
   const handleImageError = (e: Event) => {
@@ -93,7 +98,8 @@ export const GridIcon = (props: GridIconProps) => {
     const currentSrc = target.src;
 
     if (!currentSrc.includes('duckduckgo')) {
-      target.src = getDDGFavicon(props.url);
+      const fallback = getDDGFavicon(props.url);
+      target.src = fallback;
     } else {
       setIsLoading(false);
       setImageError(true);
@@ -110,8 +116,8 @@ export const GridIcon = (props: GridIconProps) => {
           alt={props.name}
           classList={{
             'grid-icon__img': true,
-            'grid-icon__img--loaded': isImgLoaded(),
-            'grid-icon__img--hidden': !isImgLoaded(),
+            'grid-icon__img--loaded': isImgLoaded() && !imageError(),
+            'grid-icon__img--hidden': !isImgLoaded() || imageError(),
           }}
           draggable={false}
           onLoad={handleImageLoad}
@@ -126,7 +132,7 @@ export const GridIcon = (props: GridIconProps) => {
 
         <Show when={imageError()}>
           <div class="grid-icon__placeholder">
-            <span class="grid-icon__error">?</span>
+            <span class="grid-icon__error">{props.name.charAt(0).toUpperCase()}</span>
           </div>
         </Show>
       </div>

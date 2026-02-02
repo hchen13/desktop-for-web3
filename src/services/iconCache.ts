@@ -1,88 +1,101 @@
 /**
- * 图标缓存系统
- * 跨 session 持久化缓存已检测的高质量图标 URL
+ * 图标缓存系统 v2
+ * 
+ * 设计原则：
+ * 1. 渐进式优化：请求同时发出，每个回来立即比较，更好就替换
+ * 2. 简化缓存：只有一个持久化缓存 + 内存镜像
+ * 3. 存储分数：允许后续继续优化
+ * 4. 实时更新：通过回调通知 UI 更新
  */
 
 import { getBuiltinIcon } from './builtinIcons';
+import { createSignal } from 'solid-js';
+
+// 存储加载状态信号
+export const [isStorageLoaded, setStorageLoaded] = createSignal(false);
+
+// 缓存版本号 - 修改此值强制刷新缓存
+// v5: 修复子域名处理和占位符检测
+const STORAGE_KEY = 'icon_cache_v5';
+
+// 缓存过期策略
+const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;      // 7天：完全过期，删除条目
+const CACHE_SOFT_EXPIRE = 24 * 60 * 60 * 1000;      // 24小时：软过期，后台刷新但先用缓存
+const CACHE_FORCE_REFRESH = 3 * 24 * 60 * 60 * 1000; // 3天：强制重新检测（忽略旧分数）
 
 interface IconCacheEntry {
-  url: string;           // 最终使用的图标 URL
-  timestamp: number;     // 缓存时间
-  source: 'builtin' | 'detected' | 'default';
+  url: string;
+  score: number;
+  timestamp: number;
 }
 
-type IconState = 'loading' | 'loaded' | 'error';
+// 来源优先级
+// DDG 容易返回占位符，icon.horse 能获取高清官方图标
+const SOURCE_PRIORITY: Record<string, number> = {
+  'chrome-extension://': 80,
+  '/favicon.ico': 70,
+  'google.com/s2/favicons': 50,
+  't3.gstatic.com/faviconV2': 50,
+  't2.gstatic.com/faviconV2': 50,
+  't1.gstatic.com/faviconV2': 50,
+  't0.gstatic.com/faviconV2': 50,
+  'icon.horse': 40,              // icon.horse 能获取高清官方图标
+  'icons.duckduckgo.com': 10,    // DDG 容易返回占位符，大幅降低
+  'favicone.com': 15,
+};
 
-// 内存缓存：domain -> entry
-const memoryCache = new Map<string, IconCacheEntry>();
+// DDG 占位符特征：48x48 灰色箭头图标
+// 当 DDG 找不到真实图标时会返回这个占位符
+const DDG_PLACEHOLDER_SIZE = 48;
 
-// 加载状态缓存：domain -> state
-const loadingStates = new Map<string, IconState>();
+export const memoryCache = new Map<string, IconCacheEntry>();
+const detectingDomains = new Set<string>();
+const updateCallbacks = new Map<string, Array<(url: string) => void>>();
 
-// 检测结果缓存（避免重复检测）
-const detectionCache = new Map<string, string>();
-
-// STORAGE_KEY for chrome.storage
-const STORAGE_KEY = 'icon_cache';
-
-/**
- * 从 chrome.storage 加载缓存
- */
 async function loadStorageCache(): Promise<void> {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
       const result = await chrome.storage.local.get(STORAGE_KEY);
       const stored = result[STORAGE_KEY] as Record<string, IconCacheEntry>;
       if (stored) {
+        const now = Date.now();
         Object.entries(stored).forEach(([domain, entry]) => {
-          // 检查缓存是否过期（30天）
-          const age = Date.now() - entry.timestamp;
-          if (age < 30 * 24 * 60 * 60 * 1000) {
+          if (now - entry.timestamp < CACHE_MAX_AGE) {
             memoryCache.set(domain, entry);
-            detectionCache.set(domain, entry.url);
           }
         });
       }
-    } catch (e) {
-      console.warn('[IconCache] Failed to load from storage:', e);
+    } else {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, IconCacheEntry>;
+        const now = Date.now();
+        Object.entries(parsed).forEach(([domain, entry]) => {
+          if (now - entry.timestamp < CACHE_MAX_AGE) {
+            memoryCache.set(domain, entry);
+          }
+        });
+      }
     }
+  } catch (e) {
+    console.warn('[IconCache] Failed to load cache:', e);
   }
+  setStorageLoaded(true);
 }
 
-/**
- * 保存缓存到 chrome.storage
- */
-async function saveStorageCache(): Promise<void> {
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    try {
-      const obj = Object.fromEntries(memoryCache.entries());
-      await chrome.storage.local.set({ [STORAGE_KEY]: obj });
-    } catch (e) {
-      console.warn('[IconCache] Failed to save to storage:', e);
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+function scheduleSave(): void {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    const obj = Object.fromEntries(memoryCache.entries());
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.set({ [STORAGE_KEY]: obj });
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
     }
-  }
+  }, 1000);
 }
 
-// 初始化时加载持久化缓存
-loadStorageCache();
-
-// 保持预加载图片的引用，防止被垃圾回收
-const preloadedImages = new Map<string, HTMLImageElement>();
-
-// 预加载指定的图片 URL 列表（同步，立即执行）
-export function preloadIcons(urls: string[]): void {
-  urls.forEach(url => {
-    if (url && !preloadedImages.has(url)) {
-      const img = new Image();
-      img.src = url;
-      preloadedImages.set(url, img);
-    }
-  });
-}
-
-/**
- * 从 URL 提取 domain
- */
 function extractDomain(url: string): string | null {
   try {
     return new URL(url).hostname;
@@ -91,161 +104,35 @@ function extractDomain(url: string): string | null {
   }
 }
 
-/**
- * 获取内置图标 URL
- */
-function getBuiltinUrl(url: string): string | null {
-  return getBuiltinIcon(url);
-}
-
-/**
- * 获取默认图标 URL（icon.horse）
- */
-function getDefaultUrl(url: string): string {
-  const domain = extractDomain(url);
-  if (!domain) return '';
-  return `https://icon.horse/icon/${domain}`;
-}
-
-/**
- * 获取缓存中的图标 URL（同步）
- * 优先级：内置图标 > 内存缓存(source=builtin) > 内存缓存 > 默认
- *
- * 内置图标优先，确保预加载的 URL 和实际使用的 URL 一致
- */
-export function getCachedIconUrl(url: string): string {
-  const domain = extractDomain(url);
-  if (!domain) return '';
-
-  // 1. 优先检查内置图标（确保使用预加载的 URL）
-  const builtin = getBuiltinUrl(url);
-  if (builtin) {
-    // 如果内存缓存不是 builtin 类型，覆盖为内置图标
-    const cached = memoryCache.get(domain);
-    if (!cached || cached.source !== 'builtin') {
-      memoryCache.set(domain, {
-        url: builtin,
-        timestamp: Date.now(),
-        source: 'builtin',
-      });
-    }
-    return builtin;
+function getSourceScore(url: string): number {
+  for (const [key, score] of Object.entries(SOURCE_PRIORITY)) {
+    if (url.includes(key)) return score;
   }
-
-  // 2. 检查内存缓存
-  if (memoryCache.has(domain)) {
-    return memoryCache.get(domain)!.url;
-  }
-
-  // 3. 返回默认 URL
-  return getDefaultUrl(url);
+  return 5;
 }
 
-/**
- * 获取图标的加载状态
- * 如果内存状态不存在，但从缓存或内置图标能获取到 URL，则认为已加载
- */
-export function getIconLoadState(url: string): IconState {
-  const domain = extractDomain(url);
-  if (!domain) return 'loading';
-
-  // 优先返回内存中的状态
-  const memState = loadingStates.get(domain);
-  if (memState) return memState;
-
-  // 如果没有内存状态，检查是否有缓存（包括内置图标）
-  if (memoryCache.has(domain) || detectionCache.has(domain) || getBuiltinUrl(url)) {
-    return 'loaded';
-  }
-
-  return 'loading';
+function calculateSizeScore(width: number, height: number): number {
+  const size = Math.max(width, height);
+  if (size < 32) return 0;          // 太小，淘汰
+  if (size < 40) return 10 + (size - 32);
+  if (size <= 64) return 25;         // 最佳显示尺寸
+  if (size <= 128) return 22;        // 高清，稍微缩放
+  if (size <= 256) return 20;        // 高清
+  if (size <= 512) return 18;        // 超高清（不再惩罚）
+  return 15;                         // 超大图标（可能是原图）
 }
 
-/**
- * 设置图标的加载状态
- */
-export function setIconLoadState(url: string, state: IconState): void {
-  const domain = extractDomain(url);
-  if (!domain) return;
-  loadingStates.set(domain, state);
+function calculateAspectScore(width: number, height: number): number {
+  const ratio = width / height;
+  const deviation = Math.abs(ratio - 1);
+  if (deviation < 0.05) return 20;
+  if (deviation < 0.1) return 18;
+  if (deviation < 0.2) return 15;
+  if (deviation < 0.5) return 10;
+  return 5;
 }
 
-/**
- * 检测并缓存最佳图标 URL（异步）
- * 首次调用时执行检测，后续调用返回缓存结果
- */
-export async function detectBestIcon(url: string): Promise<string> {
-  const domain = extractDomain(url);
-  if (!domain) return '';
-
-  // 1. 检查检测缓存
-  if (detectionCache.has(domain)) {
-    return detectionCache.get(domain)!;
-  }
-
-  // 2. 内置图标不需要检测
-  const builtin = getBuiltinUrl(url);
-  if (builtin) {
-    detectionCache.set(domain, builtin);
-    return builtin;
-  }
-
-  // 3. 执行检测
-  const sources = [
-    `https://icon.horse/icon/${domain}`,
-    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-  ];
-
-  const results = await checkMultipleSources(sources);
-
-  if (results.length > 0) {
-    // 选择最佳（优先正方形且尺寸合适的）
-    const best = selectBestIcon(results);
-    detectionCache.set(domain, best.url);
-
-    // 更新内存缓存
-    memoryCache.set(domain, {
-      url: best.url,
-      timestamp: Date.now(),
-      source: 'detected',
-    });
-
-    // 异步保存到持久化存储
-    saveStorageCache();
-
-    return best.url;
-  }
-
-  // 检测失败，使用默认
-  const defaultUrl = getDefaultUrl(url);
-  detectionCache.set(domain, defaultUrl);
-  return defaultUrl;
-}
-
-/**
- * 检测多个图片源
- */
-interface ImageCheckResult {
-  url: string;
-  width: number;
-  height: number;
-  aspectRatio: number;
-  sizeScore: number;
-}
-
-async function checkMultipleSources(sources: string[]): Promise<ImageCheckResult[]> {
-  const checkPromises = sources.map(src => checkImageSize(src));
-  const results = await Promise.allSettled(checkPromises);
-
-  return results
-    .filter((r): r is PromiseFulfilledResult<ImageCheckResult | null> =>
-      r.status === 'fulfilled' && r.value !== null
-    )
-    .map(r => r.value as ImageCheckResult);
-}
-
-async function checkImageSize(url: string): Promise<ImageCheckResult | null> {
+function checkImageSource(url: string): Promise<{ url: string; score: number; width: number; height: number } | null> {
   return new Promise((resolve) => {
     const img = new Image();
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -259,13 +146,31 @@ async function checkImageSize(url: string): Promise<ImageCheckResult | null> {
     img.onload = () => {
       const { naturalWidth: width, naturalHeight: height } = img;
       cleanup();
-      resolve({
-        url,
-        width,
-        height,
-        aspectRatio: width / height,
-        sizeScore: calculateSizeScore(width, height),
-      });
+
+      if (url.includes('chrome-extension://') && width <= 16) {
+        resolve(null);
+        return;
+      }
+
+      // DDG 48x48 占位符检测 - 这是 DDG 找不到图标时返回的默认灰色箭头
+      // 给它一个极低的分数，这样任何真实图标都能替代它
+      if (url.includes('icons.duckduckgo.com') && width === DDG_PLACEHOLDER_SIZE && height === DDG_PLACEHOLDER_SIZE) {
+        resolve({ url, score: 1, width, height }); // 极低分数
+        return;
+      }
+
+      // icon.horse 512x512 通常是占位符
+      if (url.includes('icon.horse') && width === 512 && height === 512) {
+        resolve({ url, score: 1, width, height }); // 极低分数
+        return;
+      }
+
+      const sourceScore = getSourceScore(url);
+      const sizeScore = calculateSizeScore(width, height);
+      const aspectScore = calculateAspectScore(width, height);
+      const totalScore = sourceScore + sizeScore + aspectScore;
+
+      resolve({ url, score: totalScore, width, height });
     };
 
     img.onerror = () => {
@@ -276,62 +181,319 @@ async function checkImageSize(url: string): Promise<ImageCheckResult | null> {
     timeout = setTimeout(() => {
       cleanup();
       resolve(null);
-    }, 3000);
+    }, 5000);
 
     img.src = url;
   });
 }
 
-function calculateSizeScore(width: number, height: number): number {
-  const size = Math.max(width, height);
-  const diff = Math.abs(size - 128);
-  return Math.max(0, 100 - diff);
-}
+/**
+ * 从页面 HTML 解析 favicon link 标签
+ * 用于获取网站声明的高清图标（尤其是内部网站）
+ * 返回找到的图标 URL 列表
+ */
+async function parseFaviconFromHtml(siteUrl: string): Promise<string[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
-function selectBestIcon(results: ImageCheckResult[]): ImageCheckResult {
-  // 第一优先级：正方形 + 尺寸合适
-  const squareAcceptable = results.find(r =>
-    r.aspectRatio >= 0.5 && r.aspectRatio <= 2.0 &&
-    r.width >= 64 && r.width <= 256 &&
-    r.height >= 64 && r.height <= 256
-  );
+    const response = await fetch(siteUrl, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+      }
+    });
+    clearTimeout(timeout);
 
-  if (squareAcceptable) return squareAcceptable;
+    if (!response.ok) return [];
 
-  // 第二优先级：最接近正方形的
-  const mostSquare = [...results].sort((a, b) =>
-    Math.abs(a.aspectRatio - 1) - Math.abs(b.aspectRatio - 1)
-  )[0];
+    const html = await response.text();
+    const origin = new URL(siteUrl).origin;
 
-  return mostSquare || results[0];
+    // 匹配 <link rel="icon" href="..."> 或 <link rel="apple-touch-icon" href="...">
+    const linkRegex = /<link[^>]*rel=["'](?:icon|shortcut icon|apple-touch-icon)[^"']*["'][^>]*>/gi;
+    const hrefRegex = /href=["']([^"']+)["']/i;
+    const sizesRegex = /sizes=["']([^"']+)["']/i;
+
+    const icons: { href: string; size: number }[] = [];
+    let match;
+
+    while ((match = linkRegex.exec(html)) !== null) {
+      const linkTag = match[0];
+      const hrefMatch = linkTag.match(hrefRegex);
+      if (!hrefMatch) continue;
+
+      let href = hrefMatch[1];
+
+      // 转换为绝对 URL
+      if (href.startsWith('//')) {
+        href = 'https:' + href;
+      } else if (href.startsWith('/')) {
+        href = origin + href;
+      } else if (!href.startsWith('http')) {
+        href = origin + '/' + href;
+      }
+
+      // 解析尺寸
+      const sizesMatch = linkTag.match(sizesRegex);
+      let size = 0;
+      if (sizesMatch) {
+        const sizeStr = sizesMatch[1].split('x')[0];
+        size = parseInt(sizeStr, 10) || 0;
+      }
+
+      // 优先 SVG（无限缩放）
+      if (href.includes('.svg')) {
+        size = 999;
+      }
+
+      icons.push({ href, size });
+    }
+
+    // 按尺寸排序，优先大图标
+    icons.sort((a, b) => b.size - a.size);
+
+    return icons.map(i => i.href);
+  } catch (e) {
+    return [];
+  }
 }
 
 /**
- * 清除过期缓存
+ * 判断域名是否是子域名（不是 www 或裸域名）
+ * 例如：monitor-asdx.kayaquant.com → true
+ *      www.google.com → false
+ *      google.com → false
  */
-export function clearExpiredCache(): void {
-  const now = Date.now();
-  const maxAge = 30 * 24 * 60 * 60 * 1000; // 30天
+function isSubdomain(domain: string): boolean {
+  const parts = domain.split('.');
+  if (parts.length <= 2) return false;
+  // 如果第一部分是 www，不算作子域名
+  if (parts[0] === 'www') return false;
+  return true;
+}
 
-  for (const [domain, entry] of memoryCache.entries()) {
-    if (now - entry.timestamp > maxAge) {
-      memoryCache.delete(domain);
-      detectionCache.delete(domain);
+/**
+ * 获取父域名（不带 www）
+ * 例如：monitor-asdx.kayaquant.com → kayaquant.com
+ */
+function getParentDomain(domain: string): string {
+  const parts = domain.split('.');
+  if (parts.length <= 2) return '';
+  return parts.slice(-2).join('.');
+}
+
+function getIconSources(siteUrl: string): string[] {
+  try {
+    const u = new URL(siteUrl);
+    const domain = u.hostname;
+    const origin = u.origin;
+
+    const sources: string[] = [];
+    const isSub = isSubdomain(domain);
+    const parentDomain = getParentDomain(domain);
+
+    // 1. Chrome 原生 API（扩展环境最佳）
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+      sources.push(`chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(siteUrl)}&size=64`);
     }
+
+    // 2. 直接访问子域名的 favicon.ico（对内部网站至关重要）
+    sources.push(`${origin}/favicon.ico`);
+
+    // 3. Google Favicon（使用原始域名）
+    sources.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
+
+    // 4. icon.horse - 子域名使用原域名，非子域名尝试 www 版本
+    if (isSub) {
+      // 子域名：只用原域名，不加 www
+      sources.push(`https://icon.horse/icon/${domain}`);
+    } else {
+      // 非子域名：优先 www 版本
+      const domainWithWww = domain.startsWith('www.') ? domain : `www.${domain}`;
+      sources.push(`https://icon.horse/icon/${domainWithWww}`);
+      if (domainWithWww !== domain) {
+        sources.push(`https://icon.horse/icon/${domain}`);
+      }
+    }
+
+    // 5. DuckDuckGo（使用原始域名）
+    sources.push(`https://icons.duckduckgo.com/ip3/${domain}.ico`);
+
+    // 6. 如果是子域名，也尝试父域名作为降级
+    if (isSub && parentDomain) {
+      sources.push(`https://icon.horse/icon/${parentDomain}`);
+      sources.push(`https://icon.horse/icon/www.${parentDomain}`);
+      sources.push(`https://icons.duckduckgo.com/ip3/${parentDomain}.ico`);
+    }
+
+    return sources;
+  } catch {
+    return [];
+  }
+}
+
+export function onIconUpdate(url: string, callback: (iconUrl: string) => void): () => void {
+  const domain = extractDomain(url);
+  if (!domain) return () => {};
+
+  if (!updateCallbacks.has(domain)) {
+    updateCallbacks.set(domain, []);
+  }
+  updateCallbacks.get(domain)!.push(callback);
+
+  return () => {
+    const callbacks = updateCallbacks.get(domain);
+    if (callbacks) {
+      const index = callbacks.indexOf(callback);
+      if (index >= 0) callbacks.splice(index, 1);
+    }
+  };
+}
+
+function notifyIconUpdate(domain: string, iconUrl: string): void {
+  const callbacks = updateCallbacks.get(domain);
+  if (callbacks) {
+    callbacks.forEach(cb => cb(iconUrl));
+  }
+}
+
+export function getCachedIconUrl(url: string): string {
+  const domain = extractDomain(url);
+  if (!domain) return '';
+
+  const builtin = getBuiltinIcon(url);
+  if (builtin) return builtin;
+
+  const cached = memoryCache.get(domain);
+  if (cached) return cached.url;
+
+  // 默认使用 icon.horse，因为 DDG 容易返回占位符
+  return `https://icon.horse/icon/${domain}`;
+}
+
+export function getIconLoadState(url: string): 'loading' | 'loaded' | 'error' {
+  const domain = extractDomain(url);
+  if (!domain) return 'loading';
+
+  if (getBuiltinIcon(url)) return 'loaded';
+  if (memoryCache.has(domain)) return 'loaded';
+
+  return 'loading';
+}
+
+export function setIconLoadState(_url: string, _state: 'loading' | 'loaded' | 'error'): void {
+  // 状态由缓存决定
+}
+
+export async function detectBestIcon(url: string): Promise<string> {
+  const domain = extractDomain(url);
+  if (!domain) return '';
+
+  const builtin = getBuiltinIcon(url);
+  if (builtin) return builtin;
+
+  if (detectingDomains.has(domain)) {
+    return getCachedIconUrl(url);
   }
 
-  saveStorageCache();
+  const currentEntry = memoryCache.get(domain);
+  const now = Date.now();
+  const entryAge = currentEntry ? now - currentEntry.timestamp : Infinity;
+  
+  // 判断缓存状态
+  const isFresh = entryAge < CACHE_SOFT_EXPIRE;           // 新鲜：24小时内
+  const needsForceRefresh = entryAge >= CACHE_FORCE_REFRESH; // 强制刷新：超过3天
+  
+  // 如果缓存新鲜且分数足够高，直接返回不做检测
+  if (isFresh && currentEntry && currentEntry.score >= 60) {
+    return currentEntry.url;
+  }
+  
+  // 强制刷新时忽略旧分数，从 0 开始
+  let currentScore = needsForceRefresh ? 0 : (currentEntry?.score ?? 0);
+  let bestUrl = currentEntry?.url ?? '';
+
+  detectingDomains.add(domain);
+
+  // 阶段 1: 检测标准图标源
+  const sources = getIconSources(url);
+  
+  const promises = sources.map(async (sourceUrl) => {
+    const result = await checkImageSource(sourceUrl);
+    
+    if (result && result.score > currentScore) {
+      currentScore = result.score;
+      bestUrl = result.url;
+
+      memoryCache.set(domain, {
+        url: result.url,
+        score: result.score,
+        timestamp: Date.now()
+      });
+
+      scheduleSave();
+      notifyIconUpdate(domain, result.url);
+    }
+
+    return result;
+  });
+
+  await Promise.allSettled(promises);
+
+  // 阶段 2: 如果当前分数较低，尝试从 HTML 解析 favicon
+  // 这对内部网站特别有用，因为 DDG/icon.horse 无法获取
+  if (currentScore < 50) {
+    const htmlIcons = await parseFaviconFromHtml(url);
+    
+    // 检测从 HTML 解析出的图标
+    const htmlPromises = htmlIcons.slice(0, 5).map(async (iconUrl) => {
+      const result = await checkImageSource(iconUrl);
+      
+      if (result && result.score > currentScore) {
+        // 从原网站直接获取的图标给予额外加分
+        const bonusScore = result.score + 30;
+
+        currentScore = bonusScore;
+        bestUrl = result.url;
+
+        memoryCache.set(domain, {
+          url: result.url,
+          score: bonusScore,
+          timestamp: Date.now()
+        });
+
+        scheduleSave();
+        notifyIconUpdate(domain, result.url);
+      }
+
+      return result;
+    });
+
+    await Promise.allSettled(htmlPromises);
+  }
+
+  detectingDomains.delete(domain);
+
+  if (!bestUrl) {
+    bestUrl = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+  }
+
+  return bestUrl;
 }
 
-/**
- * 清除所有缓存
- */
 export function clearAllCache(): void {
   memoryCache.clear();
-  detectionCache.clear();
-  loadingStates.clear();
-
-  if (typeof chrome !== 'undefined' && chrome.storage) {
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.remove(STORAGE_KEY);
+  } else {
+    localStorage.removeItem(STORAGE_KEY);
   }
 }
+
+export function preloadIcons(_urls: string[]): void {
+  // 不再需要预加载
+}
+
+loadStorageCache();
