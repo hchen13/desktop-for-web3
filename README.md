@@ -9,7 +9,7 @@
 
 ## 预览
 
-![Desktop for Web3 预览](public/preview.png)
+![Desktop for Web3 预览](assets/preview.png)
 
 ## 核心特性
 
