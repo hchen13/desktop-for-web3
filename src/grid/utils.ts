@@ -3,7 +3,13 @@
  * 基于 design/layout/grid-system-design.md 规范
  */
 
-import type { GridPosition, GridSize, GridElement, GridSystemSize, AnchorRelativePosition } from './types';
+import type {
+  GridPosition,
+  GridSize,
+  GridElement,
+  GridSystemSize,
+  AnchorRelativePosition,
+} from './types';
 import { GRID_UNIT, GRID_GAP, GRID_CONFIG } from './types';
 
 /**
@@ -13,7 +19,10 @@ import { GRID_UNIT, GRID_GAP, GRID_CONFIG } from './types';
  * @param viewportHeight - 视口高度
  * @returns Grid System 尺寸（动态列数和行数）
  */
-export const calculateGridSystemSize = (viewportWidth: number, viewportHeight: number): GridSystemSize => {
+export const calculateGridSystemSize = (
+  viewportWidth: number,
+  viewportHeight: number,
+): GridSystemSize => {
   // 计算可用宽度（减去左右 padding）
   const availableWidth = viewportWidth - GRID_CONFIG.paddingLeft - GRID_CONFIG.paddingRight;
 
@@ -74,7 +83,7 @@ export const getCenterColumn = (columns: number): number => {
  */
 export const anchorToAbsolute = (
   relativePos: AnchorRelativePosition,
-  anchorColumn: number
+  anchorColumn: number,
 ): GridPosition => {
   return {
     x: anchorColumn + relativePos.x,
@@ -92,7 +101,7 @@ export const anchorToAbsolute = (
  */
 export const absoluteToAnchor = (
   absolutePos: GridPosition,
-  anchorColumn: number
+  anchorColumn: number,
 ): AnchorRelativePosition => {
   return {
     x: absolutePos.x - anchorColumn,
@@ -142,7 +151,7 @@ export const getElementHeight = (size: GridSize, gridUnit: number = GRID_UNIT): 
  */
 export const getElementPosition = (
   position: GridPosition,
-  gridUnit: number = GRID_UNIT
+  gridUnit: number = GRID_UNIT,
 ): { left: number; top: number } => {
   const gridSize = gridUnit + GRID_GAP;
 
@@ -183,7 +192,7 @@ export const isOverlapping = (
   pos1: GridPosition,
   size1: GridSize,
   pos2: GridPosition,
-  size2: GridSize
+  size2: GridSize,
 ): boolean => {
   const pos1Right = pos1.x + size1.width;
   const pos1Bottom = pos1.y + size1.height;
@@ -201,20 +210,10 @@ export const isOverlapping = (
 /**
  * 检查元素是否与任何其他元素冲突
  */
-export const hasConflict = (
-  element: GridElement,
-  otherElements: GridElement[]
-): boolean => {
+export const hasConflict = (element: GridElement, otherElements: GridElement[]): boolean => {
   for (const other of otherElements) {
     if (other.id === element.id) continue;
-    if (
-      isOverlapping(
-        element.position,
-        element.size,
-        other.position,
-        other.size
-      )
-    ) {
+    if (isOverlapping(element.position, element.size, other.position, other.size)) {
       return true;
     }
   }
@@ -229,7 +228,7 @@ export const isValidPosition = (
   size: GridSize,
   columns: number,
   maxRows: number,
-  otherElements: GridElement[]
+  otherElements: GridElement[],
 ): boolean => {
   // 检查是否超出边界
   if (position.x < 0 || position.y < 0) return false;
@@ -255,7 +254,7 @@ export const findAvailablePosition = (
   size: GridSize,
   columns: number,
   startRow: number,
-  otherElements: GridElement[]
+  otherElements: GridElement[],
 ): GridPosition | null => {
   let row = startRow;
   let col = 0;
@@ -266,9 +265,7 @@ export const findAvailablePosition = (
   while (row < maxRows) {
     const position = { x: col, y: row };
 
-    if (
-      isValidPosition(position, size, columns, maxRows, otherElements)
-    ) {
+    if (isValidPosition(position, size, columns, maxRows, otherElements)) {
       return position;
     }
 
@@ -316,11 +313,11 @@ export const pixelToGridPosition = (pixelX: number, pixelY: number): GridPositio
 /**
  * 对称的像素到网格位置转换（用于拖拽落点判定）
  * 使用半格偏移实现对称判定：元素越过格子中线才切换到下一格
- * 
+ *
  * 原理：加上半格偏移后用 floor，等效于四舍五入
  * - 0-59px → grid 0（距离 grid 0 更近）
  * - 60-119px → grid 1（距离 grid 1 更近）
- * 
+ *
  * @param pixelX - 元素左上角像素 X 坐标
  * @param pixelY - 元素左上角像素 Y 坐标
  * @param _elementSize - 元素尺寸（保留参数以兼容调用）
@@ -328,15 +325,15 @@ export const pixelToGridPosition = (pixelX: number, pixelY: number): GridPositio
 export const pixelToGridPositionCentered = (
   pixelX: number,
   pixelY: number,
-  _elementSize: GridSize
+  _elementSize: GridSize,
 ): GridPosition => {
   const gridSize = GRID_UNIT + GRID_GAP;
   const halfGrid = gridSize / 2;
-  
+
   // 确保像素位置不为负数
   const clampedPixelX = Math.max(0, pixelX);
   const clampedPixelY = Math.max(0, pixelY);
-  
+
   // 加上半格偏移后用 floor，实现对称的四舍五入效果
   return {
     x: Math.max(0, Math.floor((clampedPixelX + halfGrid) / gridSize)),
@@ -350,7 +347,7 @@ export const pixelToGridPositionCentered = (
  */
 export const gridToPixelPosition = (
   gridPos: GridPosition,
-  gridUnit: number = GRID_UNIT
+  gridUnit: number = GRID_UNIT,
 ): { left: number; top: number } => {
   return getElementPosition(gridPos, gridUnit);
 };
@@ -362,15 +359,15 @@ export const gridToPixelPosition = (
 export const isValidGridPosition = (
   pos: GridPosition,
   size: GridSize,
-  gridSystemSize: GridSystemSize
+  gridSystemSize: GridSystemSize,
 ): boolean => {
   const { columns, rows } = gridSystemSize;
-  
+
   // 检查左上角是否在边界内
   if (pos.x < 0 || pos.y < 0) {
     return false;
   }
-  
+
   // 检查右下角是否在边界内
   if (pos.x + size.width > columns) {
     return false;
@@ -378,7 +375,7 @@ export const isValidGridPosition = (
   if (pos.y + size.height > rows) {
     return false;
   }
-  
+
   return true;
 };
 
@@ -390,29 +387,26 @@ export const isValidGridPosition = (
 export const clampGridPosition = (
   pos: GridPosition,
   size: GridSize,
-  gridSystemSize: GridSystemSize
+  gridSystemSize: GridSystemSize,
 ): GridPosition | null => {
   const { columns, rows } = gridSystemSize;
-  
+
   // 如果元素太大，无法放入 grid system
   if (size.width > columns || size.height > rows) {
     return null;
   }
-  
+
   // 限制 x 坐标：确保 x + width <= columns，即 x <= columns - width
   const clampedX = Math.max(0, Math.min(pos.x, columns - size.width));
-  
+
   // 限制 y 坐标：确保 y + height <= rows，即 y <= rows - height
   const clampedY = Math.max(0, Math.min(pos.y, rows - size.height));
-  
+
   const clamped = {
     x: clampedX,
     y: clampedY,
   };
-  
-  if (clampedX !== pos.x || clampedY !== pos.y) {
-  }
-  
+
   return clamped;
 };
 
@@ -423,19 +417,19 @@ export const clampGridPosition = (
 export const validateAndClampPosition = (
   pos: GridPosition,
   size: GridSize,
-  gridSystemSize: GridSystemSize
+  gridSystemSize: GridSystemSize,
 ): GridPosition | null => {
   // 先尝试限制位置
   const clamped = clampGridPosition(pos, size, gridSystemSize);
-  
+
   // 如果限制失败，返回 null
   if (!clamped) return null;
-  
+
   // 再次验证限制后的位置（双重保险）
   if (!isValidGridPosition(clamped, size, gridSystemSize)) {
     return null;
   }
-  
+
   return clamped;
 };
 

@@ -2,7 +2,7 @@
  * 获取网站 Favicon
  * 支持图片质量检测和自动降级
  * 支持内置图标映射
- * 
+ *
  * 优先级策略：
  * 1. Chrome 原生 API（扩展环境最佳）
  * 2. Google Favicon 服务（自动添加背景，深色主题友好）
@@ -10,6 +10,7 @@
  */
 
 import { getBuiltinIcon } from './builtinIcons';
+import { SOURCE_PRIORITY, getSourcePriorityScore } from './faviconConfig';
 
 interface FaviconOptions {
   size?: number;
@@ -20,23 +21,7 @@ const TARGET_SIZE = 64;
 const MIN_ACCEPTABLE_SIZE = 32;
 const MAX_ACCEPTABLE_SIZE = 256;
 
-/**
- * 图标来源优先级配置
- * Google Favicon 服务会自动添加白色背景，对深色主题最友好
- * 给予 Google 服务极高分数确保优先选择（即使尺寸较小）
- */
-const SOURCE_PRIORITY: Record<string, number> = {
-  'chrome-extension://': 80,           // Chrome 原生 API，最可靠
-  'google.com/s2/favicons': 75,        // Google 自动添加白底，深色主题最友好
-  't3.gstatic.com/faviconV2': 75,      // Google 新版 API
-  't2.gstatic.com/faviconV2': 75,      // Google 新版 API（不同 CDN）
-  't1.gstatic.com/faviconV2': 75,      // Google 新版 API（不同 CDN）
-  't0.gstatic.com/faviconV2': 75,      // Google 新版 API（不同 CDN）
-  'icons.duckduckgo.com': 20,          // DuckDuckGo
-  'favicone.com': 18,                  // Favicone
-  'icon.horse': 15,                    // icon.horse
-  'favicon.ico': 8,                    // 站点直接获取，可能被阻止
-};
+// SOURCE_PRIORITY 已迁移到 faviconConfig.ts（单一来源）
 
 /**
  * 图片检测结果
@@ -46,19 +31,19 @@ interface ImageCheckResult {
   width: number;
   height: number;
   isAcceptable: boolean;
-  aspectRatio: number;      // 宽高比，1.0 为正方形
-  totalScore: number;       // 综合评分
+  aspectRatio: number; // 宽高比，1.0 为正方形
+  totalScore: number; // 综合评分
 }
 
 /**
- * 获取图标来源的基础分
+ * 获取图标来源的基础分（委派给 faviconConfig）
  */
 function getSourcePriority(url: string): number {
-  for (const [key, score] of Object.entries(SOURCE_PRIORITY)) {
-    if (url.includes(key)) return score;
-  }
-  return 5; // 未知来源给最低分
+  return getSourcePriorityScore(url);
 }
+
+// 重新导出以便保持公共 API 不变（仅供测试 / 调试）
+export { SOURCE_PRIORITY };
 
 /**
  * 计算尺寸评分 (0-25分)
@@ -79,7 +64,7 @@ function calculateSizeScore(width: number, height: number): number {
  */
 function calculateAspectScore(aspectRatio: number): number {
   const deviation = Math.abs(aspectRatio - 1);
-  if (deviation < 0.05) return 20;      // 几乎正方形
+  if (deviation < 0.05) return 20; // 几乎正方形
   if (deviation < 0.1) return 18;
   if (deviation < 0.2) return 15;
   if (deviation < 0.5) return 10;
@@ -110,14 +95,17 @@ async function checkImageSize(url: string): Promise<ImageCheckResult | null> {
       const isSquareish = aspectRatio >= 0.5 && aspectRatio <= 2.0;
 
       // 检查尺寸是否合适
-      const sizeOk = width >= MIN_ACCEPTABLE_SIZE && width <= MAX_ACCEPTABLE_SIZE &&
-                    height >= MIN_ACCEPTABLE_SIZE && height <= MAX_ACCEPTABLE_SIZE;
+      const sizeOk =
+        width >= MIN_ACCEPTABLE_SIZE &&
+        width <= MAX_ACCEPTABLE_SIZE &&
+        height >= MIN_ACCEPTABLE_SIZE &&
+        height <= MAX_ACCEPTABLE_SIZE;
 
       // 计算综合评分（来源优先级是关键，Google 服务自动添加背景）
       const sizeScore = calculateSizeScore(width, height);
       const aspectScore = calculateAspectScore(aspectRatio);
       const sourceScore = getSourcePriority(url);
-      
+
       const totalScore = sizeScore + aspectScore + sourceScore;
 
       cleanup();
@@ -154,36 +142,36 @@ async function parseFaviconFromHtml(url: string): Promise<string[]> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    
+
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'Accept': 'text/html',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      }
+        Accept: 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      },
     });
     clearTimeout(timeout);
-    
+
     if (!response.ok) return [];
-    
+
     const html = await response.text();
     const origin = new URL(url).origin;
-    
+
     // 匹配 <link rel="icon" href="..."> 或 <link rel="apple-touch-icon" href="...">
     const linkRegex = /<link[^>]*rel=["'](?:icon|shortcut icon|apple-touch-icon)[^"']*["'][^>]*>/gi;
     const hrefRegex = /href=["']([^"']+)["']/i;
     const sizesRegex = /sizes=["']([^"']+)["']/i;
-    
+
     const icons: { href: string; size: number }[] = [];
     let match;
-    
+
     while ((match = linkRegex.exec(html)) !== null) {
       const linkTag = match[0];
       const hrefMatch = linkTag.match(hrefRegex);
       if (!hrefMatch) continue;
-      
+
       let href = hrefMatch[1];
-      
+
       // 转换为绝对 URL
       if (href.startsWith('//')) {
         href = 'https:' + href;
@@ -192,7 +180,7 @@ async function parseFaviconFromHtml(url: string): Promise<string[]> {
       } else if (!href.startsWith('http')) {
         href = origin + '/' + href;
       }
-      
+
       // 解析尺寸
       const sizesMatch = linkTag.match(sizesRegex);
       let size = 0;
@@ -200,19 +188,19 @@ async function parseFaviconFromHtml(url: string): Promise<string[]> {
         const sizeStr = sizesMatch[1].split('x')[0];
         size = parseInt(sizeStr, 10) || 0;
       }
-      
+
       // 优先 SVG（无限缩放）
       if (href.includes('.svg')) {
         size = 999;
       }
-      
+
       icons.push({ href, size });
     }
-    
+
     // 按尺寸排序，优先大图标
     icons.sort((a, b) => b.size - a.size);
-    
-    return icons.map(i => i.href);
+
+    return icons.map((i) => i.href);
   } catch {
     return [];
   }
@@ -227,18 +215,22 @@ function getIconSources(url: string): string[] {
     const u = new URL(url);
     const domain = u.hostname;
     const origin = u.origin;
-    
+
     const sources: string[] = [];
 
     // 1. Chrome 原生 Favicon 服务 (MV3 推荐方式) - 仅在扩展环境有效
     if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-      sources.push(`chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${TARGET_SIZE}`);
+      sources.push(
+        `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${TARGET_SIZE}`,
+      );
     }
 
     // 2. Google Favicon 服务 - 自动添加白色背景，深色主题最友好
     sources.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`);
     // Google 新版 API（更高质量）
-    sources.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin)}&size=128`);
+    sources.push(
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin)}&size=128`,
+    );
 
     // 3. 其他第三方服务
     sources.push(`https://icons.duckduckgo.com/ip3/${domain}.ico`);
@@ -303,12 +295,12 @@ const qualityCache = new Map<string, string>();
 
 /**
  * 获取最佳质量图标（带检测）
- * 
+ *
  * 综合评分算法（满分75分）：
  * - 来源可靠性：Chrome API +30, Google +28（自动白底）, 等
  * - 尺寸：48-128px +25 分
  * - 宽高比：正方形 +20 分
- * 
+ *
  * Google Favicon 服务会自动为透明图标添加白色背景，对深色主题最友好
  */
 export const getBestQualityIcon = async (url: string): Promise<string> => {
@@ -324,7 +316,7 @@ export const getBestQualityIcon = async (url: string): Promise<string> => {
 
   // 收集所有候选图标源
   const sources = getIconSources(url);
-  
+
   // 尝试从页面 HTML 解析 favicon（通常能获取高清图标）
   const htmlIcons = await parseFaviconFromHtml(url);
   // 把 HTML 解析的图标加入候选（放在后面，因为可能是透明背景）
@@ -333,13 +325,11 @@ export const getBestQualityIcon = async (url: string): Promise<string> => {
   if (allSources.length === 0) return '';
 
   // 并行检测所有源
-  const results = await Promise.allSettled(
-    allSources.map(src => checkImageSize(src))
-  );
+  const results = await Promise.allSettled(allSources.map((src) => checkImageSize(src)));
 
   // 筛选成功的结果
   const validResults = results
-    .map((r, i) => r.status === 'fulfilled' && r.value ? { ...r.value, index: i } : null)
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { ...r.value, index: i } : null))
     .filter((r): r is ImageCheckResult & { index: number } => r !== null);
 
   if (validResults.length === 0) {
@@ -361,7 +351,7 @@ export const getBestQualityIcon = async (url: string): Promise<string> => {
 
   qualityCache.set(cacheKey, best.url);
   return best.url;
-}
+};
 
 /**
  * 同步接口（兼容现有代码）

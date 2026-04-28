@@ -32,10 +32,10 @@ type TopoJSONCountries = {
 };
 
 const countriesGeoJson = (() => {
-  const countries = feature(
-    worldAtlas as unknown as { objects: { countries: unknown } },
-    (worldAtlas as unknown as { objects: { countries: unknown } }).objects.countries,
-  ) as unknown as TopoJSONCountries;
+  // world-atlas TopoJSON has its own opaque shape; bypass strict typing at this boundary.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const atlas = worldAtlas as any;
+  const countries = feature(atlas, atlas.objects.countries) as unknown as TopoJSONCountries;
 
   return {
     ...countries,
@@ -52,7 +52,8 @@ for (const f of countriesGeoJson.features) {
 
 const projection = geoNaturalEarth1().fitSize(
   [VIEWBOX_WIDTH, VIEWBOX_HEIGHT],
-  countriesGeoJson as unknown as object,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  countriesGeoJson as any,
 );
 const pathGenerator = geoPath(projection);
 
@@ -83,7 +84,12 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
   const [metric, setMetric] = createSignal<EconMap2Metric>('gdp');
   const [dataSet, setDataSet] = createSignal<EconMap2DataSet | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
-  const [hover, setHover] = createSignal<{ name: string; value: number | null; x: number; y: number } | null>(null);
+  const [hover, setHover] = createSignal<{
+    name: string;
+    value: number | null;
+    x: number;
+    y: number;
+  } | null>(null);
   let mapWrapperRef: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -130,30 +136,30 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
   const getTooltipStyle = () => {
     const h = hover();
     if (!h || !mapWrapperRef) return {};
-    
+
     const wrapperWidth = mapWrapperRef.clientWidth;
     const wrapperHeight = mapWrapperRef.clientHeight;
     const tooltipWidth = 120; // Approximate tooltip width
     const tooltipHeight = 50; // Approximate tooltip height
     const offset = 12;
-    
+
     let left = h.x + offset;
     let top = h.y + offset;
-    
+
     // Flip to left if near right edge
     if (left + tooltipWidth > wrapperWidth) {
       left = h.x - tooltipWidth - offset;
     }
-    
+
     // Flip to top if near bottom edge
     if (top + tooltipHeight > wrapperHeight) {
       top = h.y - tooltipHeight - offset;
     }
-    
+
     // Ensure tooltip doesn't go negative
     left = Math.max(4, left);
     top = Math.max(4, top);
-    
+
     return {
       left: `${left}px`,
       top: `${top}px`,
@@ -195,7 +201,7 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
               if (!countryName || !id) return null;
               const path = pathGenerator(featureItem as any);
               if (!path) return null;
-              
+
               // Make fill reactive by wrapping in a function that accesses dataSet() and metric()
               const getFill = () => {
                 const value = getCountryValue(id);
@@ -205,7 +211,7 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
                 }
                 return getEconMap2Color(currentMetric, value) ?? 'var(--econ-map2-nodata)';
               };
-              
+
               return (
                 <path
                   d={path}
@@ -221,14 +227,9 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
 
         <Show when={hover()}>
           {(item) => (
-            <div
-              class="econ-map2-widget__tooltip"
-              style={getTooltipStyle()}
-            >
+            <div class="econ-map2-widget__tooltip" style={getTooltipStyle()}>
               <div class="econ-map2-widget__tooltip-name">{item().name}</div>
-              <div class="econ-map2-widget__tooltip-metric">
-                {METRIC_TOOLTIP_LABELS[metric()]}
-              </div>
+              <div class="econ-map2-widget__tooltip-metric">{METRIC_TOOLTIP_LABELS[metric()]}</div>
               <div class="econ-map2-widget__tooltip-value">
                 {formatEconValue(metric(), item().value)}
               </div>

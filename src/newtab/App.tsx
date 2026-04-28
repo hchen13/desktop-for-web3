@@ -7,7 +7,13 @@ import { onMount, onCleanup, createSignal, Show } from 'solid-js';
 import { Sidebar } from '../grid/Sidebar';
 import { SettingsButton } from '../grid/SettingsButton';
 import { AnimatedLayoutContainer } from '../grid/AnimatedLayoutContainer';
-import { gridStore, switchLayout, loadFromStorage } from '../grid/store';
+import {
+  gridStore,
+  switchLayout,
+  loadFromStorage,
+  processPendingIconAdds,
+  registerPendingIconAddsListener,
+} from '../grid/store';
 import { handleWheel } from '../grid/animationStore';
 import { getDefaultElements, getDefaultLayoutIds } from '../grid/defaultLayouts';
 import { preloadIcons } from '../services/iconCache';
@@ -26,12 +32,15 @@ export const App = () => {
 
     (window as any).__gridStore = gridStore;
     (window as any).__getCurrentLayout = () => {
-      return gridStore.layouts.find(l => l.id === gridStore.currentLayoutId);
+      return gridStore.layouts.find((l) => l.id === gridStore.currentLayoutId);
     };
 
     loadFromStorage(() => {
       setIsReady(true);
       preloadAllIcons();
+      // 启动时消费 popup 留下的 pending 图标 + 注册监听器（其它 newtab 实时同步）
+      processPendingIconAdds();
+      registerPendingIconAddsListener();
     });
 
     const handleContextMenu = (e: MouseEvent) => {
@@ -46,7 +55,9 @@ export const App = () => {
       const target = e.target as HTMLElement;
 
       if (target && typeof target.closest === 'function') {
-        const closest = target.closest('.grid-widget__content, input, textarea, .event-tooltip, .event-tooltip__overlay, .grid-sidebar, .grid-sidebar__tabs, .add-tab-dialog, .add-tab-dialog-overlay');
+        const closest = target.closest(
+          '.grid-widget__content, input, textarea, .event-tooltip, .event-tooltip__overlay, .grid-sidebar, .grid-sidebar__tabs, .add-tab-dialog, .add-tab-dialog-overlay, .add-widget-dialog, .add-widget-dialog-overlay, .add-icon-dialog, .add-icon-dialog-overlay, .stable-yield-widget__body',
+        );
         if (closest) {
           return;
         }
@@ -65,11 +76,7 @@ export const App = () => {
         }
       }
 
-      const targetId = handleWheel(
-        e.deltaY,
-        gridStore.layouts,
-        gridStore.currentLayoutId
-      );
+      const targetId = handleWheel(e.deltaY, gridStore.layouts, gridStore.currentLayoutId);
 
       if (targetId) {
         switchLayout(targetId);
@@ -88,8 +95,8 @@ export const App = () => {
   const preloadAllIcons = () => {
     const urlsToPreload: string[] = [];
 
-    gridStore.layouts.forEach(layout => {
-      layout.elements.forEach(element => {
+    gridStore.layouts.forEach((layout) => {
+      layout.elements.forEach((element) => {
         if (element.type === 'icon') {
           const url = (element.data as any)?.url;
           if (url) {

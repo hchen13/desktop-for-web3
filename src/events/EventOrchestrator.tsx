@@ -9,11 +9,10 @@ import { createSignal, onMount, onCleanup, JSX, ParentComponent } from 'solid-js
 import {
   EventPriority,
   type DragState,
-  DRAG_THRESHOLD,
-  CLICK_TIME_MAX,
   isInsideInteractiveElement,
   type GridElementData,
 } from './types';
+import { DRAG_THRESHOLD, CLICK_TIME_MAX } from './constants';
 
 /**
  * 事件类型
@@ -67,9 +66,7 @@ export const INTERACTIVE_SELECTORS_DEFAULT = [
  * 判断事件目标是否在可交互元素内
  */
 function isInInteractiveElement(target: HTMLElement): boolean {
-  return INTERACTIVE_SELECTORS_DEFAULT.some(selector =>
-    target.closest(selector)
-  );
+  return INTERACTIVE_SELECTORS_DEFAULT.some((selector) => target.closest(selector));
 }
 
 /**
@@ -154,14 +151,15 @@ export function EventOrchestrator(props: EventOrchestratorProps) {
   const determineEventType = (e: MouseEvent): EventType => {
     const target = e.target as HTMLElement;
 
-    // 优先级 1：检查是否在 sidebar 内
-    if (isInSidebar(target)) {
-      return 'interaction';
-    }
-
-    // 优先级 2：检查右键菜单
+    // 优先级 1：右键菜单（应当在 sidebar 检查之前判定，
+    // 让右键在 sidebar 内也能触发 context-menu）
     if (e.button === 2) {
       return 'context-menu';
+    }
+
+    // 优先级 2：检查是否在 sidebar 内
+    if (isInSidebar(target)) {
+      return 'interaction';
     }
 
     // 只处理左键的拖拽逻辑
@@ -259,15 +257,15 @@ export function EventOrchestrator(props: EventOrchestratorProps) {
 
     const deltaX = e.clientX - state.startPosition.x;
     const deltaY = e.clientY - state.startPosition.y;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const distance = Math.hypot(deltaX, deltaY);
 
-    // 判断是否达到拖拽阈值
+    // 判断是否达到拖拽阈值（严格大于：5px 临界值不触发拖拽）
     if (distance > DRAG_THRESHOLD) {
-      setDragState(prev => ({ ...prev, isDragging: true, isPotentialDrag: false }));
+      setDragState((prev) => ({ ...prev, isDragging: true, isPotentialDrag: false }));
     }
 
     // 更新当前位置
-    setDragState(prev => ({ ...prev, currentPosition: { x: e.clientX, y: e.clientY } }));
+    setDragState((prev) => ({ ...prev, currentPosition: { x: e.clientX, y: e.clientY } }));
 
     // 通知拖拽移动
     if (getDragState().isDragging) {
@@ -324,7 +322,7 @@ export function EventOrchestrator(props: EventOrchestratorProps) {
       ref={(el: HTMLDivElement) => (containerRef = el)}
       class="event-orchestrator"
       onMouseDown={handleMouseDown}
-      style={{ 'width': '100%', 'height': '100%', 'position': 'relative' }}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
     >
       {props.children}
     </div>

@@ -2,11 +2,11 @@
  * Sidebar 组件 - 脱离Grid的系统层
  */
 
-import { createSignal, Show, For, createMemo } from 'solid-js';
+import { createSignal, Show, For, createMemo, type JSX } from 'solid-js';
 import { gridStore, switchLayout, addLayout, deleteLayout, updateLayout } from './store';
 import type { DesktopLayout } from './types';
 import { AddTabDialog } from './AddTabDialog';
-import { useContextMenu } from '../components/layout/ContextMenu';
+import { useContextMenu, type ContextMenuItem } from '../components/layout/ContextMenu';
 import { BootstrapIcon } from '../components/BootstrapIcon';
 import { TAB_ICON_CONFIG } from './tabIconConfig';
 import { HomeIcon, KlineIcon, BlockchainIcon, GlobeIcon } from './SidebarIcons';
@@ -15,10 +15,10 @@ import './grid.css';
 const UNDELETABLE_TABS = ['主页'];
 
 const DEFAULT_TAB_ICONS: Record<string, () => JSX.Element> = {
-  '主页': HomeIcon,
-  '交易所': KlineIcon,
-  '链上': BlockchainIcon,
-  '资讯': GlobeIcon,
+  主页: HomeIcon,
+  交易所: KlineIcon,
+  链上: BlockchainIcon,
+  资讯: GlobeIcon,
 };
 
 export const Sidebar = () => {
@@ -78,7 +78,7 @@ export const Sidebar = () => {
     e.stopPropagation();
 
     const canDelete = isDeletable(layout.name);
-    const items = [
+    const items: ContextMenuItem[] = [
       {
         label: '编辑',
         action: () => handleEditClick(layout),
@@ -88,7 +88,7 @@ export const Sidebar = () => {
     if (canDelete) {
       items.push({
         label: '删除',
-        variant: 'danger' as const,
+        variant: 'danger',
         action: () => deleteLayout(layout.id),
       });
     }
@@ -114,7 +114,7 @@ export const Sidebar = () => {
             {(layout) => {
               const icon = createMemo(() => {
                 if (layout.iconId) {
-                  const iconConfig = TAB_ICON_CONFIG.find(i => i.id === layout.iconId);
+                  const iconConfig = TAB_ICON_CONFIG.find((i) => i.id === layout.iconId);
                   if (iconConfig) {
                     return { iconName: iconConfig.iconName };
                   }
@@ -163,10 +163,7 @@ export const Sidebar = () => {
 
       <Show when={tooltip()}>
         {(t) => (
-          <div
-            class="grid-sidebar__tooltip"
-            style={{ top: `${t().top}px` }}
-          >
+          <div class="grid-sidebar__tooltip" style={{ top: `${t().top}px` }}>
             {t().text}
           </div>
         )}
@@ -177,8 +174,12 @@ export const Sidebar = () => {
         onClose={handleDialogClose}
         onConfirm={handleConfirm}
         isEditMode={isEditMode()}
-        initialName={editingLayoutId() ? layouts().find(l => l.id === editingLayoutId())?.name : undefined}
-        initialIconId={editingLayoutId() ? layouts().find(l => l.id === editingLayoutId())?.iconId : undefined}
+        initialName={
+          editingLayoutId() ? layouts().find((l) => l.id === editingLayoutId())?.name : undefined
+        }
+        initialIconId={
+          editingLayoutId() ? layouts().find((l) => l.id === editingLayoutId())?.iconId : undefined
+        }
       />
       <ContextMenuComponent />
     </>

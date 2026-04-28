@@ -9,30 +9,49 @@ export interface FormattedNumber {
 }
 
 /**
- * 格式化大数字（支持 K、M、B，保留1位小数）
- * 自动移除末尾的 0
+ * 仅在小数点之后裁掉尾零，整数部分的 0 不会被误删
+ *
+ * "100"     -> "100"
+ * "1.00"    -> "1"
+ * "1.50"    -> "1.5"
+ * "0.0001"  -> "0.0001"
  */
-export function formatLargeNumber(num: number): FormattedNumber {
-  if (num >= 1e9) {
-    const value = (num / 1e9).toFixed(1).replace(/\.0$/, '');
-    return { value, unit: 'B' };
-  } else if (num >= 1e6) {
-    const value = (num / 1e6).toFixed(1).replace(/\.0$/, '');
-    return { value, unit: 'M' };
-  } else if (num >= 1e3) {
-    const value = (num / 1e3).toFixed(1).replace(/\.0$/, '');
-    return { value, unit: 'K' };
-  } else {
-    const value = num.toFixed(2).replace(/\.?0+$/, '');
-    return { value, unit: '' };
-  }
+function trimTrailingZeros(s: string): string {
+  if (!s.includes('.')) return s;
+  return s.replace(/\.?0+$/, '');
 }
 
 /**
- * 格式化为指定小数位数，移除末尾的 0
+ * 格式化大数字（K / M / B）
+ *
+ * 支持负数、自动跳过 NaN / Infinity
+ */
+export function formatLargeNumber(num: number): FormattedNumber {
+  if (!Number.isFinite(num)) {
+    return { value: '-', unit: '' };
+  }
+
+  const sign = num < 0 ? '-' : '';
+  const abs = Math.abs(num);
+
+  if (abs >= 1e9) {
+    return { value: sign + trimTrailingZeros((abs / 1e9).toFixed(1)), unit: 'B' };
+  }
+  if (abs >= 1e6) {
+    return { value: sign + trimTrailingZeros((abs / 1e6).toFixed(1)), unit: 'M' };
+  }
+  if (abs >= 1e3) {
+    return { value: sign + trimTrailingZeros((abs / 1e3).toFixed(1)), unit: 'K' };
+  }
+  return { value: sign + trimTrailingZeros(abs.toFixed(2)), unit: '' };
+}
+
+/**
+ * 格式化为指定小数位数；只裁小数点后的尾零
  */
 export function formatNumber(num: number, decimals: number): string {
-  return num.toFixed(decimals).replace(/\.?0+$/, '');
+  if (!Number.isFinite(num)) return '-';
+  return trimTrailingZeros(num.toFixed(decimals));
 }
 
 /**
@@ -56,7 +75,7 @@ export interface FormattedMetrics {
  */
 export function formatMetricsForUI(
   metrics: ChainMetrics | null,
-  selectedChain: ChainId
+  selectedChain: ChainId,
 ): FormattedMetrics | null {
   if (!metrics) {
     return null;
@@ -64,7 +83,6 @@ export function formatMetricsForUI(
 
   const chain = metrics.chain;
 
-  // 确保使用的是当前选中链的数据
   if (chain !== selectedChain) {
     return null;
   }
@@ -72,16 +90,13 @@ export function formatMetricsForUI(
   const isBTC = chain === 'btc';
   const isSOL = chain === 'sol';
 
-  // 格式化活跃地址（所有链通用）
   const activeAddressesFormatted = metrics.activeAddresses
     ? formatLargeNumber(metrics.activeAddresses.activeAddresses)
     : null;
 
-  // 格式化 TPS（使用 K,M,B）
   const tpsFormatted = metrics.tps ? formatLargeNumber(metrics.tps.tps) : null;
 
   if (isBTC) {
-    // BTC: fees 格式化
     let feesValue: string | null = null;
     if (metrics.gasPrice) {
       const feesNum = metrics.gasPrice.avgGasGwei;
@@ -99,49 +114,50 @@ export function formatMetricsForUI(
       chain,
       fees: feesValue,
       feesUnit: metrics.gasPrice?.unit || 'sat/vB',
-      blockDelay: metrics.blockTimeDelay ? Math.round(metrics.blockTimeDelay.delaySeconds / 60).toString() : null,
+      blockDelay: metrics.blockTimeDelay
+        ? Math.round(metrics.blockTimeDelay.delaySeconds / 60).toString()
+        : null,
       blockDelayUnit: 'm',
       tps: tpsFormatted ? `${tpsFormatted.value}${tpsFormatted.unit}` : null,
-      activeAddresses: activeAddressesFormatted ? `${activeAddressesFormatted.value}${activeAddressesFormatted.unit}` : null,
-    };
-  } else {
-    // 非 BTC 链
-    const tvlFormatted = metrics.tvl ? formatLargeNumber(metrics.tvl.tvl) : null;
-
-    // Gas Price 格式化
-    let gasPriceValue: string | null = null;
-    let gasUnitDisplay = metrics.gasPrice?.unit || 'Gwei';
-
-    if (metrics.gasPrice) {
-      if (isSOL) {
-        // SOL: 转换为 lamports 显示
-        const lamports = metrics.gasPrice.avgGasGwei * 1e9;
-        const formatted = formatLargeNumber(lamports);
-        gasPriceValue = `${formatted.value}${formatted.unit}`;
-        gasUnitDisplay = 'Lamports';
-      } else {
-        // EVM 链: Gas Price 使用 2 位小数
-        gasPriceValue = formatNumber(metrics.gasPrice.avgGasGwei, 2);
-        gasUnitDisplay = metrics.gasPrice?.unit || 'Gwei';
-      }
-    }
-
-    // Block Delay 格式化
-    let blockDelayValue: string | null = null;
-    if (metrics.blockTimeDelay) {
-      blockDelayValue = isSOL
-        ? formatNumber(metrics.blockTimeDelay.delaySeconds, 0)
-        : formatNumber(metrics.blockTimeDelay.delaySeconds, 1);
-    }
-
-    return {
-      chain,
-      blockDelay: blockDelayValue,
-      gasPrice: gasPriceValue,
-      gasUnit: gasUnitDisplay,
-      tps: tpsFormatted ? `${tpsFormatted.value}${tpsFormatted.unit}` : null,
-      tvl: tvlFormatted ? `${tvlFormatted.value}${tvlFormatted.unit}` : null,
-      activeAddresses: activeAddressesFormatted ? `${activeAddressesFormatted.value}${activeAddressesFormatted.unit}` : null,
+      activeAddresses: activeAddressesFormatted
+        ? `${activeAddressesFormatted.value}${activeAddressesFormatted.unit}`
+        : null,
     };
   }
+
+  const tvlFormatted = metrics.tvl ? formatLargeNumber(metrics.tvl.tvl) : null;
+
+  let gasPriceValue: string | null = null;
+  let gasUnitDisplay = metrics.gasPrice?.unit || 'Gwei';
+
+  if (metrics.gasPrice) {
+    if (isSOL) {
+      const lamports = metrics.gasPrice.avgGasGwei * 1e9;
+      const formatted = formatLargeNumber(lamports);
+      gasPriceValue = `${formatted.value}${formatted.unit}`;
+      gasUnitDisplay = 'Lamports';
+    } else {
+      gasPriceValue = formatNumber(metrics.gasPrice.avgGasGwei, 2);
+      gasUnitDisplay = metrics.gasPrice?.unit || 'Gwei';
+    }
+  }
+
+  let blockDelayValue: string | null = null;
+  if (metrics.blockTimeDelay) {
+    blockDelayValue = isSOL
+      ? formatNumber(metrics.blockTimeDelay.delaySeconds, 0)
+      : formatNumber(metrics.blockTimeDelay.delaySeconds, 1);
+  }
+
+  return {
+    chain,
+    blockDelay: blockDelayValue,
+    gasPrice: gasPriceValue,
+    gasUnit: gasUnitDisplay,
+    tps: tpsFormatted ? `${tpsFormatted.value}${tpsFormatted.unit}` : null,
+    tvl: tvlFormatted ? `${tvlFormatted.value}${tvlFormatted.unit}` : null,
+    activeAddresses: activeAddressesFormatted
+      ? `${activeAddressesFormatted.value}${activeAddressesFormatted.unit}`
+      : null,
+  };
 }

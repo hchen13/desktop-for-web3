@@ -20,11 +20,12 @@ import {
   getElementHeightPx,
 } from '../grid/utils';
 import { GRID_UNIT, GRID_GAP } from '../grid/types';
+import { DRAG_THRESHOLD } from './constants';
 
 /**
  * 获取元素占用的所有格子位置
  */
-const getOccupiedCells = (pos: GridPosition, size: GridSize): string[] => {
+export const getOccupiedCells = (pos: GridPosition, size: GridSize): string[] => {
   const cells: string[] = [];
   for (let x = pos.x; x < pos.x + size.width; x++) {
     for (let y = pos.y; y < pos.y + size.height; y++) {
@@ -38,11 +39,11 @@ const getOccupiedCells = (pos: GridPosition, size: GridSize): string[] => {
  * 检查位置是否与任何固定元素重叠
  * 注意：所有位置参数都应该是绝对坐标
  */
-const overlapsWithFixedElement = (
+export const overlapsWithFixedElement = (
   pos: GridPosition,
   size: GridSize,
   elements: GridElement[],
-  excludeId?: string
+  excludeId?: string,
 ): boolean => {
   for (const el of elements) {
     if (excludeId && el.id === excludeId) continue;
@@ -58,7 +59,9 @@ const overlapsWithFixedElement = (
 /**
  * 获取grid边界（动态计算）
  */
-const getGridBoundaries = (gridSystemSize: GridSystemSize): { maxCols: number; maxRows: number } => {
+const getGridBoundaries = (
+  gridSystemSize: GridSystemSize,
+): { maxCols: number; maxRows: number } => {
   return {
     maxCols: gridSystemSize.columns,
     maxRows: gridSystemSize.rows,
@@ -69,12 +72,12 @@ const getGridBoundaries = (gridSystemSize: GridSystemSize): { maxCols: number; m
  * 限制位置在grid边界内且不与固定元素重叠
  * 返回 null 表示位置无效
  */
-const clampPosition = (
+export const clampPosition = (
   pos: GridPosition,
   size: GridSize,
   elements: GridElement[],
   gridSystemSize: GridSystemSize,
-  elementId?: string
+  elementId?: string,
 ): GridPosition | null => {
   const { maxCols, maxRows } = getGridBoundaries(gridSystemSize);
 
@@ -96,26 +99,26 @@ const clampPosition = (
  * BFS 算法找到所有元素的最终位置
  * 确保没有任何两个元素重叠
  * 如果被拖拽元素的新位置与固定元素重叠，返回空map（表示无效位置）
- * 
+ *
  * 优化策略：
  * 1. 换位检测：被拖元素原位置能容纳被推元素时直接换位
  * 2. 拖拽方向感知：优先向拖拽方向推开
  * 3. 最小位移：选择距离原位置最近的可用位置
  * 4. 图标垂直后备：图标优先水平移动，水平不可行时允许垂直
- * 
+ *
  * 注意：所有位置都使用绝对坐标
  */
-const calculateNewLayout = (
+export const calculateNewLayout = (
   elements: GridElement[],
   draggedElementId: string,
   newDraggedPos: GridPosition,
   gridSystemSize: GridSystemSize,
-  originalDraggedPos?: GridPosition // 可选：被拖元素的原位置，用于换位检测和方向感知
+  originalDraggedPos?: GridPosition, // 可选：被拖元素的原位置，用于换位检测和方向感知
 ): Map<string, GridPosition> => {
   const result = new Map<string, GridPosition>();
 
   // 找到被拖拽元素
-  const draggedEl = elements.find(el => el.id === draggedElementId);
+  const draggedEl = elements.find((el) => el.id === draggedElementId);
   if (!draggedEl) return result;
 
   // 获取原位置（用于换位检测和方向感知）
@@ -141,7 +144,7 @@ const calculateNewLayout = (
     const occupied = new Set<string>();
     for (const [id, pos] of currentPositions) {
       if (excludeIds && excludeIds.includes(id)) continue;
-      const el = elements.find(e => e.id === id);
+      const el = elements.find((e) => e.id === id);
       if (el) {
         for (const cell of getOccupiedCells(pos, el.size)) {
           occupied.add(cell);
@@ -152,31 +155,83 @@ const calculateNewLayout = (
   };
 
   // 检查某个位置是否可用（考虑元素尺寸）
-  const isPositionAvailable = (pos: GridPosition, size: GridSize, excludeIds?: string[]): boolean => {
+  const isPositionAvailable = (
+    pos: GridPosition,
+    size: GridSize,
+    excludeIds?: string[],
+  ): boolean => {
     // 边界检查
-    if (pos.x < 0 || pos.y < 0 ||
-        pos.x + size.width > gridSystemSize.columns ||
-        pos.y + size.height > gridSystemSize.rows) {
+    if (
+      pos.x < 0 ||
+      pos.y < 0 ||
+      pos.x + size.width > gridSystemSize.columns ||
+      pos.y + size.height > gridSystemSize.rows
+    ) {
       return false;
     }
     const cells = getOccupiedCells(pos, size);
     const occupied = getOccupied(excludeIds);
-    return !cells.some(cell => occupied.has(cell));
+    return !cells.some((cell) => occupied.has(cell));
   };
 
-  // 检查原位置是否能容纳目标元素（用于换位检测）
-  const canSwapToOriginalPos = (targetElement: GridElement): boolean => {
-    // 检查原位置是否能容纳目标元素（只需要能放下，不要求尺寸相同）
-    if (dragOriginalPos.x + targetElement.size.width > gridSystemSize.columns ||
-        dragOriginalPos.y + targetElement.size.height > gridSystemSize.rows) {
-      return false;
+  /**
+   * 在被拖拽元素**原 footprint 内**找一个能放下目标元素的位置
+   *
+   * 关键改进：原版只查 dragOriginalPos 左上角一格，导致 2×2 widget 拖走后多个被推开的
+   * 小元素中只有第一个能换位、其余跑到 BFS 路径。改为遍历 dragged 原 footprint 内所有
+   * 子位置，返回距离 target 当前位置最近的可用位置。
+   *
+   * 返回 null 表示原 footprint 内无任何位置能放下 target。
+   */
+  const findSwapPositionInFootprint = (targetElement: GridElement): GridPosition | null => {
+    const dW = draggedEl.size.width;
+    const dH = draggedEl.size.height;
+    const tW = targetElement.size.width;
+    const tH = targetElement.size.height;
+
+    // 目标元素比 dragged 大，原 footprint 装不下
+    if (tW > dW || tH > dH) return null;
+
+    const candidates: { pos: GridPosition; distance: number }[] = [];
+    const targetCurrentPos = currentPositions.get(targetElement.id) ?? targetElement.position;
+
+    for (let dx = 0; dx <= dW - tW; dx++) {
+      for (let dy = 0; dy <= dH - tH; dy++) {
+        const pos = { x: dragOriginalPos.x + dx, y: dragOriginalPos.y + dy };
+
+        // 边界检查
+        if (
+          pos.x < 0 ||
+          pos.y < 0 ||
+          pos.x + tW > gridSystemSize.columns ||
+          pos.y + tH > gridSystemSize.rows
+        ) {
+          continue;
+        }
+        // 不能与 dragged 元素的新位置重叠（拖动距离 < 自身尺寸时新旧 footprint 会部分重叠，
+        // 这些重叠格已被 dragged 占据，不能再分配给 displaced）
+        if (isOverlapping(pos, targetElement.size, newDraggedPos, draggedEl.size)) {
+          continue;
+        }
+        // 与固定元素重叠 → 跳过
+        if (overlapsWithFixedElement(pos, targetElement.size, elements, targetElement.id)) {
+          continue;
+        }
+        // 与其他元素（含已被处理过移到新位置的）冲突 → 跳过
+        if (!isPositionAvailable(pos, targetElement.size, [draggedElementId, targetElement.id])) {
+          continue;
+        }
+
+        // 曼哈顿距离 — 选离 target 当前位置最近的，降低视觉位移
+        const distance =
+          Math.abs(pos.x - targetCurrentPos.x) + Math.abs(pos.y - targetCurrentPos.y);
+        candidates.push({ pos, distance });
+      }
     }
-    // 检查原位置是否与固定元素重叠
-    if (overlapsWithFixedElement(dragOriginalPos, targetElement.size, elements, targetElement.id)) {
-      return false;
-    }
-    // 检查原位置放置目标元素后是否会与其他元素（除了拖拽元素和目标元素自己）重叠
-    return isPositionAvailable(dragOriginalPos, targetElement.size, [draggedElementId, targetElement.id]);
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.distance - b.distance);
+    return candidates[0].pos;
   };
 
   // BFS 队列：需要重新定位的元素
@@ -194,7 +249,7 @@ const calculateNewLayout = (
   }
 
   result.set(draggedElementId, validatedPos);
-  
+
   // 检查哪些元素与被拖拽元素的新位置冲突
   for (const el of elements) {
     if (el.id === draggedElementId) continue;
@@ -220,9 +275,27 @@ const calculateNewLayout = (
     const currentPos = currentPositions.get(current.id)!;
     let foundPosition: GridPosition | null = null;
 
-    // 优先尝试换位：如果被拖元素的原位置能容纳当前元素
-    if (canSwapToOriginalPos(current)) {
-      foundPosition = { ...dragOriginalPos };
+    // 优先尝试换位：被推开的元素应优先回填到 dragged 元素的原 footprint 内任一空位
+    const swapPos = findSwapPositionInFootprint(current);
+    if (swapPos) {
+      foundPosition = swapPos;
+    }
+    // 诊断（开关：window.__DRAG_DEBUG = true）
+    if (
+      typeof window !== 'undefined' &&
+      (window as unknown as Record<string, unknown>).__DRAG_DEBUG
+    ) {
+      // eslint-disable-next-line no-console
+      console.log('[DragSwap]', {
+        dragged: draggedElementId,
+        draggedSize: draggedEl.size,
+        dragFrom: dragOriginalPos,
+        dragTo: newDraggedPos,
+        displaced: current.id,
+        displacedSize: current.size,
+        swapDest: swapPos,
+        path: swapPos ? 'swap' : 'bfs',
+      });
     }
 
     // 如果不能换位，使用 BFS 搜索最近的可用位置
@@ -245,7 +318,8 @@ const calculateNewLayout = (
       });
 
       // 对于图标，垂直方向作为后备（但仍允许）
-      const isIcon = current.size.width === 1 && current.size.height === 1 && current.type === 'icon';
+      const isIcon =
+        current.size.width === 1 && current.size.height === 1 && current.type === 'icon';
       const directions = isIcon
         ? sortedDirections // 图标现在也允许四个方向，但根据拖拽方向排序
         : sortedDirections;
@@ -364,6 +438,50 @@ const calculateNewLayout = (
     }
   }
 
+  // ===== 终局验证 =====
+  // 规则：
+  // 1) displaced 落在 dragged **原 footprint 内** → 总是允许（这是合理 swap）
+  // 2) displaced 跑出原 footprint → 距离不能超过 dragged 尺寸 + 1
+  //    超过则视为 BFS 远跑（被推元素比 dragged 大装不下 / 级联失控），整个 drop 拒绝
+  // 3) dragged 不能与任何最终位置重叠（兜底）
+  const maxDisplacement = Math.max(draggedEl.size.width, draggedEl.size.height) + 1;
+  const footprintMaxX = dragOriginalPos.x + draggedEl.size.width;
+  const footprintMaxY = dragOriginalPos.y + draggedEl.size.height;
+  const finalDraggedPos = result.get(draggedElementId);
+
+  for (const [id, finalPos] of result) {
+    if (id === draggedElementId) continue;
+    const original = elements.find((e) => e.id === id);
+    if (!original) continue;
+
+    // 没动 → 跳过
+    const moved = finalPos.x !== original.position.x || finalPos.y !== original.position.y;
+    if (moved) {
+      // 是否落在 dragged 原 footprint 内
+      const inFootprint =
+        finalPos.x >= dragOriginalPos.x &&
+        finalPos.x + original.size.width <= footprintMaxX &&
+        finalPos.y >= dragOriginalPos.y &&
+        finalPos.y + original.size.height <= footprintMaxY;
+
+      if (!inFootprint) {
+        const distance =
+          Math.abs(finalPos.x - original.position.x) + Math.abs(finalPos.y - original.position.y);
+        if (distance > maxDisplacement) {
+          return new Map(); // 拒绝 — 推到 footprint 外且距离过远
+        }
+      }
+    }
+
+    // 重叠兜底
+    if (
+      finalDraggedPos &&
+      isOverlapping(finalDraggedPos, draggedEl.size, finalPos, original.size)
+    ) {
+      return new Map();
+    }
+  }
+
   return result;
 };
 
@@ -454,10 +572,14 @@ export class DragSystem {
 
   /**
    * 获取响应式状态
+   * - isDragging: 真正进入拖拽态的布尔（mousedown 后超过 DRAG_THRESHOLD 才为 true）
+   * - draggedElement: 当前被拖拽的元素对象（mousedown 即可设置，但仅在 isDragging=true 时有视觉效果）
+   * - displacedElements: BFS 推开后的新位置 map
    */
   getSignals() {
     return {
-      isDragging: this.draggedElementSignal[0],
+      isDragging: this.isDraggingSignal[0],
+      draggedElement: this.draggedElementSignal[0],
       displacedElements: this.displacedElementsSignal[0],
     };
   }
@@ -465,11 +587,7 @@ export class DragSystem {
   /**
    * 开始拖拽
    */
-  startDrag(
-    element: GridElement,
-    event: MouseEvent,
-    elementRef: HTMLDivElement
-  ): boolean {
+  startDrag(element: GridElement, event: MouseEvent, elementRef: HTMLDivElement): boolean {
     if (element.fixed === true) return false;
 
     this.clickStartTimeSignal[1](Date.now());
@@ -501,7 +619,12 @@ export class DragSystem {
   /**
    * 处理拖拽移动
    */
-  handleMouseMove(event: MouseEvent): { shouldUpdate: boolean; visualPosition: { left: number; top: number } } | null {
+  handleMouseMove(
+    event: MouseEvent,
+  ): {
+    shouldUpdate: boolean;
+    visualPosition: { left: number; top: number; scale: string };
+  } | null {
     if (!this.dragRef || !this.containerRef) {
       return null;
     }
@@ -509,9 +632,10 @@ export class DragSystem {
     const startPos = this.dragStartMouseSignal[0]();
     const deltaX = event.clientX - startPos.x;
     const deltaY = event.clientY - startPos.y;
+    const distance = Math.hypot(deltaX, deltaY);
 
-    // 只有移动超过 5px 才开始拖拽
-    if (!this.isDraggingSignal[0]() && (Math.abs(deltaX) <= 5 && Math.abs(deltaY) <= 5)) {
+    // 严格大于 DRAG_THRESHOLD 才开始拖拽，与 EventOrchestrator 保持一致
+    if (!this.isDraggingSignal[0]() && distance <= DRAG_THRESHOLD) {
       return null;
     }
 
@@ -550,7 +674,7 @@ export class DragSystem {
           element,
           size,
           elementWidth,
-          elementHeight
+          elementHeight,
         ),
       };
     }
@@ -561,7 +685,7 @@ export class DragSystem {
       element.size,
       this.elementsSignal[0](),
       this.gridSystemSizeSignal[0](),
-      element.id
+      element.id,
     );
 
     if (!finalPos) {
@@ -577,7 +701,7 @@ export class DragSystem {
       element.id,
       finalPos,
       this.gridSystemSizeSignal[0](),
-      originalPos
+      originalPos,
     );
     this.displacedElementsSignal[1](newLayout);
 
@@ -589,7 +713,7 @@ export class DragSystem {
       element,
       size,
       elementWidth,
-      elementHeight
+      elementHeight,
     );
 
     return {
@@ -608,7 +732,7 @@ export class DragSystem {
     element: GridElement,
     size: GridSystemSize,
     elementWidth: number,
-    elementHeight: number
+    elementHeight: number,
   ): { left: number; top: number; scale: string } {
     const scale = 1.05;
     const scaleOffsetX = (elementWidth * (scale - 1)) / 2;
@@ -644,7 +768,7 @@ export class DragSystem {
     element: GridElement,
     size: GridSystemSize,
     elementWidth: number,
-    elementHeight: number
+    elementHeight: number,
   ): { left: number; top: number; scale: string } {
     const scale = 1.05;
     const scaleOffsetX = (elementWidth * (scale - 1)) / 2;
@@ -776,7 +900,7 @@ export class DragSystem {
         element.size,
         this.elementsSignal[0](),
         this.gridSystemSizeSignal[0](),
-        element.id
+        element.id,
       );
 
       if (!clampedPos) {
@@ -791,7 +915,7 @@ export class DragSystem {
         element.id,
         clampedPos,
         this.gridSystemSizeSignal[0](),
-        originalPos
+        originalPos,
       );
 
       result = {

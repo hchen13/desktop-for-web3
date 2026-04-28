@@ -26,10 +26,7 @@ const storageSet = async (key: string, value: any): Promise<void> => {
   }
 };
 
-const CORS_PROXIES = [
-  'https://api.allorigins.win/raw?url=',
-  'https://corsproxy.io/?',
-];
+const CORS_PROXIES = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?'];
 const RSS2JSON_API = 'https://api.rss2json.com/v1/api.json?rss_url=';
 
 const IGNORED_CATEGORIES = ['Odaily', 'OdailyPlanet', 'Odaily星球日报'];
@@ -85,8 +82,16 @@ const RSS_SOURCES: Record<string, RSSSourceConfig> = {
     name: 'BlockBeats',
     baseUrl: 'https://api.theblockbeats.news',
     channels: {
-      newsflash: { url: 'https://api.theblockbeats.news/v2/rss/newsflash', tag: 'newsflash', enabled: true },
-      article: { url: 'https://api.theblockbeats.news/v2/rss/article', tag: 'article', enabled: true },
+      newsflash: {
+        url: 'https://api.theblockbeats.news/v2/rss/newsflash',
+        tag: 'newsflash',
+        enabled: true,
+      },
+      article: {
+        url: 'https://api.theblockbeats.news/v2/rss/article',
+        tag: 'article',
+        enabled: true,
+      },
     },
   },
   odaily: {
@@ -133,7 +138,7 @@ class RSSService {
   }
 
   private notifyListeners(): void {
-    this.listeners.forEach(callback => {
+    this.listeners.forEach((callback) => {
       try {
         callback({ ...this.currentState });
       } catch (error) {
@@ -153,14 +158,12 @@ class RSSService {
     if (!channel) return null;
 
     const items: any[] = [];
-    channel.querySelectorAll('item').forEach(item => {
+    channel.querySelectorAll('item').forEach((item) => {
       const parsedItem: any = {};
 
       const directChildren = Array.from(item.children);
       for (const child of directChildren) {
-        const tagName = child.tagName.includes(':')
-          ? child.tagName.split(':')[1]
-          : child.tagName;
+        const tagName = child.tagName.includes(':') ? child.tagName.split(':')[1] : child.tagName;
 
         if (tagName === 'category') {
           if (!parsedItem.categories) parsedItem.categories = [];
@@ -174,7 +177,8 @@ class RSSService {
         }
       }
 
-      const guid = item.querySelector('guid')?.textContent || item.querySelector('link')?.textContent;
+      const guid =
+        item.querySelector('guid')?.textContent || item.querySelector('link')?.textContent;
       if (guid) {
         parsedItem.guid = guid;
         items.push(parsedItem);
@@ -189,7 +193,11 @@ class RSSService {
 
     if (sourceName === 'CoinDesk') {
       for (const cat of categories) {
-        if (cat.domain && cat.domain !== 'tag' && cat.domain.startsWith('https://www.coindesk.com/')) {
+        if (
+          cat.domain &&
+          cat.domain !== 'tag' &&
+          cat.domain.startsWith('https://www.coindesk.com/')
+        ) {
           if (IGNORED_CATEGORIES.includes(cat.value)) continue;
           return cat.value;
         }
@@ -224,14 +232,14 @@ class RSSService {
     return html.replace(/<[^>]*>/g, '').trim();
   }
 
-  private async fetchDirect(url: string): Promise<{ items: any[], fromRSS2JSON: boolean }> {
+  private async fetchDirect(url: string): Promise<{ items: any[]; fromRSS2JSON: boolean }> {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const xml = await response.text();
     return { items: this.parseXML(xml)?.items || [], fromRSS2JSON: false };
   }
 
-  private async fetchViaProxy(url: string): Promise<{ items: any[], fromRSS2JSON: boolean }> {
+  private async fetchViaProxy(url: string): Promise<{ items: any[]; fromRSS2JSON: boolean }> {
     for (const proxy of CORS_PROXIES) {
       try {
         const proxiedUrl = proxy + encodeURIComponent(url);
@@ -249,7 +257,7 @@ class RSSService {
     throw new Error('All proxies failed');
   }
 
-  private async fetchViaRSS2JSON(url: string): Promise<{ items: any[], fromRSS2JSON: boolean }> {
+  private async fetchViaRSS2JSON(url: string): Promise<{ items: any[]; fromRSS2JSON: boolean }> {
     const apiUrl = RSS2JSON_API + encodeURIComponent(url);
     const response = await fetch(apiUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -272,9 +280,15 @@ class RSSService {
 
   private getDevProxyUrl(url: string): string | null {
     const proxyMap: Record<string, { prefix: string; base: string }> = {
-      'api.theblockbeats.news': { prefix: '/rss-proxy/blockbeats', base: 'https://api.theblockbeats.news' },
+      'api.theblockbeats.news': {
+        prefix: '/rss-proxy/blockbeats',
+        base: 'https://api.theblockbeats.news',
+      },
       'rss.odaily.news': { prefix: '/rss-proxy/odaily', base: 'https://rss.odaily.news' },
-      'cointelegraph.com': { prefix: '/rss-proxy/cointelegraph', base: 'https://cointelegraph.com' },
+      'cointelegraph.com': {
+        prefix: '/rss-proxy/cointelegraph',
+        base: 'https://cointelegraph.com',
+      },
       'www.coindesk.com': { prefix: '/rss-proxy/coindesk', base: 'https://www.coindesk.com' },
     };
 
@@ -286,7 +300,7 @@ class RSSService {
     return null;
   }
 
-  private async fetchViaDevProxy(url: string): Promise<{ items: any[], fromRSS2JSON: boolean }> {
+  private async fetchViaDevProxy(url: string): Promise<{ items: any[]; fromRSS2JSON: boolean }> {
     const proxyUrl = this.getDevProxyUrl(url);
     if (!proxyUrl) throw new Error('No dev proxy for this URL');
 
@@ -300,9 +314,14 @@ class RSSService {
     let rawItems: any[] = [];
     let fromRSS2JSON = false;
 
-    const isDevEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isDevEnv =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const methods = isChromeContext
-      ? [() => this.fetchDirect(url), () => this.fetchViaProxy(url), () => this.fetchViaRSS2JSON(url)]
+      ? [
+          () => this.fetchDirect(url),
+          () => this.fetchViaProxy(url),
+          () => this.fetchViaRSS2JSON(url),
+        ]
       : isDevEnv
         ? [() => this.fetchViaDevProxy(url), () => this.fetchViaRSS2JSON(url)]
         : [() => this.fetchViaProxy(url), () => this.fetchViaRSS2JSON(url)];
@@ -346,7 +365,9 @@ class RSSService {
       });
     }
 
-    console.log(`[RSSService] ${sourceName}/${channelTag}: ${items.length} items${fromRSS2JSON ? ' (rss2json)' : ''}`);
+    console.log(
+      `[RSSService] ${sourceName}/${channelTag}: ${items.length} items${fromRSS2JSON ? ' (rss2json)' : ''}`,
+    );
     return items;
   }
 
@@ -358,7 +379,7 @@ class RSSService {
       for (const [channelId, channel] of Object.entries(source.channels)) {
         if (!channel.enabled) continue;
 
-        const promise = this.fetchRSS(channel.url, source.name, channel.tag).then(items => {
+        const promise = this.fetchRSS(channel.url, source.name, channel.tag).then((items) => {
           if (items.length > 0) {
             const key = `${sourceId}:${channelId}`;
             results.set(key, items);
@@ -376,14 +397,20 @@ class RSSService {
   private dedupeBySource(items: RSSItem[]): RSSItem[] {
     const guidMap = new Map<string, RSSItem>();
 
+    // Invalid Date 视为最旧（-Infinity），任何合法日期都能替代它
+    const toTime = (s: string): number => {
+      const t = new Date(s).getTime();
+      return isNaN(t) ? -Infinity : t;
+    };
+
     for (const item of items) {
       const existing = guidMap.get(item.guid);
 
       if (!existing) {
         guidMap.set(item.guid, item);
       } else {
-        const pubDate = new Date(item.pubDate).getTime();
-        const existingPubDate = new Date(existing.pubDate).getTime();
+        const pubDate = toTime(item.pubDate);
+        const existingPubDate = toTime(existing.pubDate);
 
         if (pubDate > existingPubDate) {
           guidMap.set(item.guid, item);
@@ -413,7 +440,7 @@ class RSSService {
 
   async getFromCache(): Promise<RSSItem[] | null> {
     try {
-      const cached = await storageGet(STORAGE_KEY_CACHE) as RSSCacheData;
+      const cached = (await storageGet(STORAGE_KEY_CACHE)) as RSSCacheData;
 
       if (!cached || !cached.items || cached.version !== CACHE_VERSION) {
         return null;
@@ -442,7 +469,7 @@ class RSSService {
   async sync(): Promise<void> {
     this.updateState({
       ...this.currentState,
-      status: 'syncing'
+      status: 'syncing',
     });
 
     const sourceItems = await this.fetchAllSources();
@@ -541,5 +568,27 @@ class RSSService {
 
 const rssService = new RSSService();
 
-export { rssService };
+/**
+ * 测试辅助：dedupeBySource 的纯函数版本
+ * 用于单测，不依赖 RSSService 实例
+ */
+export function dedupeBySourceForTest(items: RSSItem[]): RSSItem[] {
+  return (rssService as any).dedupeBySource(items);
+}
+
+/**
+ * 测试辅助：parseXML 的纯函数版本
+ */
+export function parseXMLForTest(xml: string): any {
+  return (rssService as any).parseXML(xml);
+}
+
+/**
+ * 测试辅助：mergeAndSort 的纯函数版本
+ */
+export function mergeAndSortForTest(sourceItems: Map<string, RSSItem[]>): RSSItem[] {
+  return (rssService as any).mergeAndSort(sourceItems);
+}
+
+export { rssService, RSSService };
 export default rssService;

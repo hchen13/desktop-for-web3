@@ -23,17 +23,17 @@ export const INTERACTIVE_SELECTORS = [
  * 事件优先级（从高到低）
  */
 export enum EventPriority {
-  CONTEXT_MENU = 1,  // 右键菜单
-  INTERACTION = 2,   // 组件内部交互
-  DRAG = 3,          // 拖拽操作
+  CONTEXT_MENU = 1, // 右键菜单
+  INTERACTION = 2, // 组件内部交互
+  DRAG = 3, // 拖拽操作
 }
 
 /**
  * 拖拽状态
  */
 export interface DragState {
-  isDragging: boolean;        // 正在拖拽
-  isPotentialDrag: boolean;   // 可能拖拽（mousedown 后等待移动判断）
+  isDragging: boolean; // 正在拖拽
+  isPotentialDrag: boolean; // 可能拖拽（mousedown 后等待移动判断）
   startPosition: { x: number; y: number };
   currentPosition: { x: number; y: number };
   startTime: number;
@@ -43,9 +43,9 @@ export interface DragState {
 
 /**
  * 拖拽常量
+ * @deprecated 从 './constants' 引入以保持单一来源
  */
-export const DRAG_THRESHOLD = 5;    // 移动超过 5px 算拖拽
-export const CLICK_TIME_MAX = 200;  // 200ms 内释放算点击
+export { DRAG_THRESHOLD, CLICK_TIME_MAX } from './constants';
 
 /**
  * 上下文菜单目标类型
@@ -85,5 +85,5 @@ export interface AppEvent {
  * 判断是否在可交互元素内
  */
 export function isInsideInteractiveElement(target: HTMLElement): boolean {
-  return INTERACTIVE_SELECTORS.some(selector => target.closest(selector));
+  return INTERACTIVE_SELECTORS.some((selector) => target.closest(selector));
 }

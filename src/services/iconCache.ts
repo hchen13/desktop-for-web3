@@ -1,6 +1,6 @@
 /**
  * 图标缓存系统 v2
- * 
+ *
  * 设计原则：
  * 1. 渐进式优化：请求同时发出，每个回来立即比较，更好就替换
  * 2. 简化缓存：只有一个持久化缓存 + 内存镜像
@@ -10,6 +10,7 @@
 
 import { getBuiltinIcon } from './builtinIcons';
 import { createSignal } from 'solid-js';
+import { SOURCE_PRIORITY, getSourcePriorityScore } from './faviconConfig';
 
 // 存储加载状态信号
 export const [isStorageLoaded, setStorageLoaded] = createSignal(false);
@@ -19,8 +20,8 @@ export const [isStorageLoaded, setStorageLoaded] = createSignal(false);
 const STORAGE_KEY = 'icon_cache_v5';
 
 // 缓存过期策略
-const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;      // 7天：完全过期，删除条目
-const CACHE_SOFT_EXPIRE = 24 * 60 * 60 * 1000;      // 24小时：软过期，后台刷新但先用缓存
+const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7天：完全过期，删除条目
+const CACHE_SOFT_EXPIRE = 24 * 60 * 60 * 1000; // 24小时：软过期，后台刷新但先用缓存
 const CACHE_FORCE_REFRESH = 3 * 24 * 60 * 60 * 1000; // 3天：强制重新检测（忽略旧分数）
 
 interface IconCacheEntry {
@@ -29,20 +30,7 @@ interface IconCacheEntry {
   timestamp: number;
 }
 
-// 来源优先级
-// DDG 容易返回占位符，icon.horse 能获取高清官方图标
-const SOURCE_PRIORITY: Record<string, number> = {
-  'chrome-extension://': 80,
-  '/favicon.ico': 70,
-  'google.com/s2/favicons': 50,
-  't3.gstatic.com/faviconV2': 50,
-  't2.gstatic.com/faviconV2': 50,
-  't1.gstatic.com/faviconV2': 50,
-  't0.gstatic.com/faviconV2': 50,
-  'icon.horse': 40,              // icon.horse 能获取高清官方图标
-  'icons.duckduckgo.com': 10,    // DDG 容易返回占位符，大幅降低
-  'favicone.com': 15,
-};
+// 来源优先级 — 从 faviconConfig 单一来源 import，与 faviconService 保持一致
 
 // DDG 占位符特征：48x48 灰色箭头图标
 // 当 DDG 找不到真实图标时会返回这个占位符
@@ -97,29 +85,32 @@ function scheduleSave(): void {
 }
 
 function extractDomain(url: string): string | null {
+  if (!url) return null;
   try {
     return new URL(url).hostname;
   } catch {
-    return null;
+    // 输入可能没有 scheme（例如 'example.com'）— 自动补全 https:// 后再尝试
+    try {
+      return new URL(`https://${url}`).hostname;
+    } catch {
+      return null;
+    }
   }
 }
 
 function getSourceScore(url: string): number {
-  for (const [key, score] of Object.entries(SOURCE_PRIORITY)) {
-    if (url.includes(key)) return score;
-  }
-  return 5;
+  return getSourcePriorityScore(url);
 }
 
 function calculateSizeScore(width: number, height: number): number {
   const size = Math.max(width, height);
-  if (size < 32) return 0;          // 太小，淘汰
+  if (size < 32) return 0; // 太小，淘汰
   if (size < 40) return 10 + (size - 32);
-  if (size <= 64) return 25;         // 最佳显示尺寸
-  if (size <= 128) return 22;        // 高清，稍微缩放
-  if (size <= 256) return 20;        // 高清
-  if (size <= 512) return 18;        // 超高清（不再惩罚）
-  return 15;                         // 超大图标（可能是原图）
+  if (size <= 64) return 25; // 最佳显示尺寸
+  if (size <= 128) return 22; // 高清，稍微缩放
+  if (size <= 256) return 20; // 高清
+  if (size <= 512) return 18; // 超高清（不再惩罚）
+  return 15; // 超大图标（可能是原图）
 }
 
 function calculateAspectScore(width: number, height: number): number {
@@ -132,7 +123,9 @@ function calculateAspectScore(width: number, height: number): number {
   return 5;
 }
 
-function checkImageSource(url: string): Promise<{ url: string; score: number; width: number; height: number } | null> {
+function checkImageSource(
+  url: string,
+): Promise<{ url: string; score: number; width: number; height: number } | null> {
   return new Promise((resolve) => {
     const img = new Image();
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -154,7 +147,11 @@ function checkImageSource(url: string): Promise<{ url: string; score: number; wi
 
       // DDG 48x48 占位符检测 - 这是 DDG 找不到图标时返回的默认灰色箭头
       // 给它一个极低的分数，这样任何真实图标都能替代它
-      if (url.includes('icons.duckduckgo.com') && width === DDG_PLACEHOLDER_SIZE && height === DDG_PLACEHOLDER_SIZE) {
+      if (
+        url.includes('icons.duckduckgo.com') &&
+        width === DDG_PLACEHOLDER_SIZE &&
+        height === DDG_PLACEHOLDER_SIZE
+      ) {
         resolve({ url, score: 1, width, height }); // 极低分数
         return;
       }
@@ -200,9 +197,9 @@ async function parseFaviconFromHtml(siteUrl: string): Promise<string[]> {
     const response = await fetch(siteUrl, {
       signal: controller.signal,
       headers: {
-        'Accept': 'text/html',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      }
+        Accept: 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      },
     });
     clearTimeout(timeout);
 
@@ -254,7 +251,7 @@ async function parseFaviconFromHtml(siteUrl: string): Promise<string[]> {
     // 按尺寸排序，优先大图标
     icons.sort((a, b) => b.size - a.size);
 
-    return icons.map(i => i.href);
+    return icons.map((i) => i.href);
   } catch (e) {
     return [];
   }
@@ -296,7 +293,9 @@ function getIconSources(siteUrl: string): string[] {
 
     // 1. Chrome 原生 API（扩展环境最佳）
     if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-      sources.push(`chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(siteUrl)}&size=64`);
+      sources.push(
+        `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(siteUrl)}&size=64`,
+      );
     }
 
     // 2. 直接访问子域名的 favicon.ico（对内部网站至关重要）
@@ -355,7 +354,7 @@ export function onIconUpdate(url: string, callback: (iconUrl: string) => void): 
 function notifyIconUpdate(domain: string, iconUrl: string): void {
   const callbacks = updateCallbacks.get(domain);
   if (callbacks) {
-    callbacks.forEach(cb => cb(iconUrl));
+    callbacks.forEach((cb) => cb(iconUrl));
   }
 }
 
@@ -401,16 +400,16 @@ export async function detectBestIcon(url: string): Promise<string> {
   const currentEntry = memoryCache.get(domain);
   const now = Date.now();
   const entryAge = currentEntry ? now - currentEntry.timestamp : Infinity;
-  
+
   // 判断缓存状态
-  const isFresh = entryAge < CACHE_SOFT_EXPIRE;           // 新鲜：24小时内
+  const isFresh = entryAge < CACHE_SOFT_EXPIRE; // 新鲜：24小时内
   const needsForceRefresh = entryAge >= CACHE_FORCE_REFRESH; // 强制刷新：超过3天
-  
+
   // 如果缓存新鲜且分数足够高，直接返回不做检测
   if (isFresh && currentEntry && currentEntry.score >= 60) {
     return currentEntry.url;
   }
-  
+
   // 强制刷新时忽略旧分数，从 0 开始
   let currentScore = needsForceRefresh ? 0 : (currentEntry?.score ?? 0);
   let bestUrl = currentEntry?.url ?? '';
@@ -419,10 +418,10 @@ export async function detectBestIcon(url: string): Promise<string> {
 
   // 阶段 1: 检测标准图标源
   const sources = getIconSources(url);
-  
+
   const promises = sources.map(async (sourceUrl) => {
     const result = await checkImageSource(sourceUrl);
-    
+
     if (result && result.score > currentScore) {
       currentScore = result.score;
       bestUrl = result.url;
@@ -430,7 +429,7 @@ export async function detectBestIcon(url: string): Promise<string> {
       memoryCache.set(domain, {
         url: result.url,
         score: result.score,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       scheduleSave();
@@ -446,11 +445,11 @@ export async function detectBestIcon(url: string): Promise<string> {
   // 这对内部网站特别有用，因为 DDG/icon.horse 无法获取
   if (currentScore < 50) {
     const htmlIcons = await parseFaviconFromHtml(url);
-    
+
     // 检测从 HTML 解析出的图标
     const htmlPromises = htmlIcons.slice(0, 5).map(async (iconUrl) => {
       const result = await checkImageSource(iconUrl);
-      
+
       if (result && result.score > currentScore) {
         // 从原网站直接获取的图标给予额外加分
         const bonusScore = result.score + 30;
@@ -461,7 +460,7 @@ export async function detectBestIcon(url: string): Promise<string> {
         memoryCache.set(domain, {
           url: result.url,
           score: bonusScore,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
 
         scheduleSave();

@@ -37,7 +37,7 @@ function adjustPosition(
   x: number,
   y: number,
   menuWidth: number,
-  menuHeight: number
+  menuHeight: number,
 ): { x: number; y: number } {
   const padding = 8;
   const maxX = window.innerWidth - menuWidth - padding;
@@ -55,9 +55,12 @@ const ESTIMATED_MENU_ITEM_HEIGHT = 40;
 
 export const ContextMenu = (props: ContextMenuProps) => {
   const [adjustedPosition, setAdjustedPosition] = createSignal({ x: props.x, y: props.y });
-  const [menuSize, setMenuSize] = createSignal({ width: ESTIMATED_MENU_WIDTH, height: ESTIMATED_MENU_ITEM_HEIGHT });
-  let menuRef: HTMLDivElement | undefined = undefined;
-  let contentRef: HTMLDivElement | undefined = undefined;
+  const [menuSize, setMenuSize] = createSignal({
+    width: ESTIMATED_MENU_WIDTH,
+    height: ESTIMATED_MENU_ITEM_HEIGHT,
+  });
+  let menuRef!: HTMLDivElement;
+  let contentRef!: HTMLDivElement;
 
   // 当位置或打开状态变化时，更新位置
   createEffect(() => {
@@ -110,14 +113,14 @@ export const ContextMenu = (props: ContextMenuProps) => {
     <Show when={props.isOpen}>
       <Portal>
         <div
-          ref={menuRef!}
+          ref={menuRef}
           class="context-menu"
           style={{
             left: `${adjustedPosition().x}px`,
             top: `${adjustedPosition().y}px`,
           }}
         >
-          <div ref={contentRef!} class="context-menu__content">
+          <div ref={contentRef} class="context-menu__content">
             <For each={props.items}>
               {(item) => (
                 <button

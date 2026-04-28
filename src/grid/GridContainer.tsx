@@ -7,8 +7,26 @@
  * - 组件专注于渲染
  */
 
-import { onMount, onCleanup, createMemo, createSignal, For, Show, JSX, lazy, Suspense } from 'solid-js';
-import { gridStore, setGridStore, removeElement, addElement, updateIconElement, updateElementState, saveLayouts } from './store';
+import {
+  onMount,
+  onCleanup,
+  createMemo,
+  createSignal,
+  For,
+  Show,
+  JSX,
+  lazy,
+  Suspense,
+} from 'solid-js';
+import {
+  gridStore,
+  setGridStore,
+  removeElement,
+  addElement,
+  updateIconElement,
+  updateElementState,
+  saveLayouts,
+} from './store';
 import { useContextMenu } from '../components/layout/ContextMenu';
 import { mergeMenuItems, getElementIdFromEvent } from './contextMenuUtils';
 import { createInitialWidgetState } from '../config/widgetDefaults';
@@ -37,29 +55,76 @@ import { GridIcon } from './GridIcon';
 import './grid.css';
 
 // 动态导入 Widget 组件 - 使用 lazy 加载确保组件只创建一次
-const lazyCalendar = lazy(() => import('../components/Widgets/CalendarWidget').then(m => ({ default: m.CalendarWidget })));
-const lazyNews = lazy(() => import('../components/Widgets/NewsWidget').then(m => ({ default: m.NewsWidget })));
-const lazyWatchlist = lazy(() => import('../components/Widgets/WatchlistWidget').then(m => ({ default: m.WatchlistWidget })));
-const lazyChainMonitor = lazy(() => import('../components/Widgets/ChainMonitorWidget').then(m => ({ default: m.ChainMonitorWidget })));
-const lazyWorldClock = lazy(() => import('../components/Widgets/WorldClockWidget').then(m => ({ default: m.WorldClockWidget })));
-const lazyEconMap = lazy(() => import('../components/Widgets/EconMap2Widget').then(m => ({ default: m.EconMapWidget })));
-const lazyRateMonitor = lazy(() => import('../components/Widgets/RateMonitorWidget').then(m => ({ default: m.RateMonitorWidget })));
-const lazySearch = lazy(() => import('../components/SearchBar/SearchBar').then(m => ({ default: m.SearchBar })));
-const lazyTime = lazy(() => import('../components/TimeDisplay/TimeDisplay').then(m => ({ default: m.TimeDisplay })));
+const lazyCalendar = lazy(() =>
+  import('../components/Widgets/CalendarWidget').then((m) => ({ default: m.CalendarWidget })),
+);
+const lazyNews = lazy(() =>
+  import('../components/Widgets/NewsWidget').then((m) => ({ default: m.NewsWidget })),
+);
+const lazyWatchlist = lazy(() =>
+  import('../components/Widgets/WatchlistWidget').then((m) => ({ default: m.WatchlistWidget })),
+);
+const lazyChainMonitor = lazy(() =>
+  import('../components/Widgets/ChainMonitorWidget').then((m) => ({
+    default: m.ChainMonitorWidget,
+  })),
+);
+const lazyWorldClock = lazy(() =>
+  import('../components/Widgets/WorldClockWidget').then((m) => ({ default: m.WorldClockWidget })),
+);
+const lazyEconMap = lazy(() =>
+  import('../components/Widgets/EconMap2Widget').then((m) => ({ default: m.EconMapWidget })),
+);
+const lazyRateMonitor = lazy(() =>
+  import('../components/Widgets/RateMonitorWidget').then((m) => ({ default: m.RateMonitorWidget })),
+);
+const lazyStablePeg = lazy(() =>
+  import('../components/Widgets/StablePegWidget').then((m) => ({ default: m.StablePegWidget })),
+);
+const lazyStableYield = lazy(() =>
+  import('../components/Widgets/StableYieldWidget').then((m) => ({ default: m.StableYieldWidget })),
+);
+const lazyRWATreasuries = lazy(() =>
+  import('../components/Widgets/RWATreasuriesWidget').then((m) => ({
+    default: m.RWATreasuriesWidget,
+  })),
+);
+const lazySearch = lazy(() =>
+  import('../components/SearchBar/SearchBar').then((m) => ({ default: m.SearchBar })),
+);
+const lazyTime = lazy(() =>
+  import('../components/TimeDisplay/TimeDisplay').then((m) => ({ default: m.TimeDisplay })),
+);
 
 // 根据组件名称返回对应的 lazy 组件
 const getLazyComponent = (component: string) => {
   switch (component) {
-    case 'calendar': return lazyCalendar;
-    case 'news': return lazyNews;
-    case 'watchlist': return lazyWatchlist;
-    case 'chain-monitor': return lazyChainMonitor;
-    case 'world-clock': return lazyWorldClock;
-    case 'econ-map': return lazyEconMap;
-    case 'rate-monitor': return lazyRateMonitor;
-    case 'search': return lazySearch;
-    case 'time': return lazyTime;
-    default: return null;
+    case 'calendar':
+      return lazyCalendar;
+    case 'news':
+      return lazyNews;
+    case 'watchlist':
+      return lazyWatchlist;
+    case 'chain-monitor':
+      return lazyChainMonitor;
+    case 'world-clock':
+      return lazyWorldClock;
+    case 'econ-map':
+      return lazyEconMap;
+    case 'rate-monitor':
+      return lazyRateMonitor;
+    case 'stable-peg':
+      return lazyStablePeg;
+    case 'stable-yield':
+      return lazyStableYield;
+    case 'rwa-treasuries':
+      return lazyRWATreasuries;
+    case 'search':
+      return lazySearch;
+    case 'time':
+      return lazyTime;
+    default:
+      return null;
   }
 };
 
@@ -76,7 +141,9 @@ export const GridContainer = (props: GridContainerProps = {}) => {
 
   // 添加图标对话框状态
   const [isAddIconDialogOpen, setIsAddIconDialogOpen] = createSignal(false);
-  const [rightClickPosition, setRightClickPosition] = createSignal<{ x: number; y: number } | null>(null);
+  const [rightClickPosition, setRightClickPosition] = createSignal<{ x: number; y: number } | null>(
+    null,
+  );
 
   // 添加组件对话框状态
   const [isAddWidgetDialogOpen, setIsAddWidgetDialogOpen] = createSignal(false);
@@ -84,19 +151,19 @@ export const GridContainer = (props: GridContainerProps = {}) => {
   // 编辑图标对话框状态
   const [isEditIconDialogOpen, setIsEditIconDialogOpen] = createSignal(false);
   const [editingIconId, setEditingIconId] = createSignal<string | null>(null);
-  
+
   // 编辑图标的初始值
   const editingIconInitialName = createMemo(() => {
     const iconId = editingIconId();
     if (!iconId) return '';
-    const element = elements().find(e => e.id === iconId);
+    const element = elements().find((e) => e.id === iconId);
     return element && element.type === 'icon' ? (element.data as any)?.name || '' : '';
   });
-  
+
   const editingIconInitialUrl = createMemo(() => {
     const iconId = editingIconId();
     if (!iconId) return '';
-    const element = elements().find(e => e.id === iconId);
+    const element = elements().find((e) => e.id === iconId);
     return element && element.type === 'icon' ? (element.data as any)?.url || '' : '';
   });
 
@@ -105,13 +172,13 @@ export const GridContainer = (props: GridContainerProps = {}) => {
 
   // 使用 gridStore 创建响应式的 elements（锚点相对坐标）
   const elements = createMemo(() => {
-    const layout = gridStore.layouts.find(l => l.id === currentLayoutId());
+    const layout = gridStore.layouts.find((l) => l.id === currentLayoutId());
     return layout?.elements || [];
   });
 
   // Grid System 尺寸（动态计算）
   const [gridSystemSize, setGridSystemSize] = createSignal<GridSystemSize>(
-    calculateGridSystemSize(window.innerWidth, window.innerHeight)
+    calculateGridSystemSize(window.innerWidth, window.innerHeight),
   );
 
   // 计算锚点列索引
@@ -120,7 +187,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
   // 将元素的锚点相对坐标转换为绝对坐标，供 DragSystem 使用
   const elementsWithAbsolutePositions = createMemo(() => {
     const anchor = anchorColumn();
-    return elements().map(el => ({
+    return elements().map((el) => ({
       ...el,
       position: anchorToAbsolute(el.position, anchor),
     }));
@@ -180,9 +247,10 @@ export const GridContainer = (props: GridContainerProps = {}) => {
    */
   const handleContextMenu = (element: GridElement, e: MouseEvent) => {
     // 对于 calendar、chain-monitor 和 world-clock 组件，让组件自己完全处理（包括删除选项）
-    const isSelfHandled = (element as any).component === 'calendar'
-      || (element as any).component === 'chain-monitor'
-      || (element as any).component === 'world-clock';
+    const isSelfHandled =
+      (element as any).component === 'calendar' ||
+      (element as any).component === 'chain-monitor' ||
+      (element as any).component === 'world-clock';
 
     if (element.type === 'fixed' && isSelfHandled) {
       // 不阻止默认行为，让组件自己的 onContextMenu 处理
@@ -200,7 +268,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
     // 默认菜单：只有非固定元素可以删除
     if (element.fixed !== true) {
       const menuItems = [];
-      
+
       // 如果是图标类型，添加编辑选项
       if (element.type === 'icon') {
         menuItems.push({
@@ -212,13 +280,13 @@ export const GridContainer = (props: GridContainerProps = {}) => {
           },
         });
       }
-      
+
       menuItems.push({
         label: '删除',
         variant: 'danger' as const,
         action: () => removeElement(element.id),
       });
-      
+
       showContextMenu(e.clientX, e.clientY, menuItems);
     }
     // 时间显示固定元素不提供菜单
@@ -269,7 +337,10 @@ export const GridContainer = (props: GridContainerProps = {}) => {
    * 根据鼠标位置找到最近的可用grid位置
    * 注意：pixelToGridPosition 返回绝对坐标，因此必须使用 elementsWithAbsolutePositions 进行冲突检测
    */
-  const findNearestAvailableGridPosition = (pixelX: number, pixelY: number): GridPosition | null => {
+  const findNearestAvailableGridPosition = (
+    pixelX: number,
+    pixelY: number,
+  ): GridPosition | null => {
     if (!containerRef) return null;
 
     const gridPos = pixelToGridPosition(pixelX, pixelY);
@@ -303,7 +374,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
       iconSize,
       size.columns,
       Math.max(0, gridPos.y - searchRadius),
-      currentElements
+      currentElements,
     );
 
     return availablePos;
@@ -317,7 +388,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
 
     let position = findNearestAvailableGridPosition(
       rightClickPosition()!.x,
-      rightClickPosition()!.y
+      rightClickPosition()!.y,
     );
 
     if (!position) {
@@ -326,7 +397,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
         GRID_SIZES.ICON,
         gridSystemSize().columns,
         0,
-        elementsWithAbsolutePositions()
+        elementsWithAbsolutePositions(),
       );
       if (!defaultPos) {
         setIsAddIconDialogOpen(false);
@@ -384,6 +455,12 @@ export const GridContainer = (props: GridContainerProps = {}) => {
         return GRID_SIZES.ECON_MAP;
       case 'rate-monitor':
         return GRID_SIZES.ICON;
+      case 'stable-peg':
+        return GRID_SIZES.STANDARD_WIDGET;
+      case 'stable-yield':
+        return GRID_SIZES.STANDARD_WIDGET;
+      case 'rwa-treasuries':
+        return GRID_SIZES.STANDARD_WIDGET;
       default:
         return GRID_SIZES.STANDARD_WIDGET;
     }
@@ -396,7 +473,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
   const findNearestAvailableGridPositionForWidget = (
     widgetType: WidgetType,
     pixelX: number,
-    pixelY: number
+    pixelY: number,
   ): GridPosition | null => {
     if (!containerRef) return null;
 
@@ -442,7 +519,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
       widgetSize,
       size.columns,
       Math.max(0, gridPos.y - searchRadius),
-      currentElements
+      currentElements,
     );
 
     return availablePos;
@@ -457,7 +534,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
     let position = findNearestAvailableGridPositionForWidget(
       widgetType,
       rightClickPosition()!.x,
-      rightClickPosition()!.y
+      rightClickPosition()!.y,
     );
 
     if (!position) {
@@ -467,7 +544,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
         widgetSize,
         gridSystemSize().columns,
         0,
-        elementsWithAbsolutePositions()
+        elementsWithAbsolutePositions(),
       );
       if (!defaultPos) {
         setIsAddWidgetDialogOpen(false);
@@ -574,13 +651,15 @@ export const GridContainer = (props: GridContainerProps = {}) => {
 
   /**
    * 恢复元素样式
-   * 注意：element.position 是锚点相对坐标，需要转换
+   * 注意：element.position 现在是**绝对坐标**（因为 handleMouseDown 传给 startDrag 的是
+   * elementWithAbsPos() 的版本，从此 dragSystem 内部 + getState().draggedElement 全部用
+   * absolute 坐标）。这里**不能**再调 anchorToAbsolute，否则会双重转换，让元素跳到
+   * anchor column = 6 cell 右边的位置。
    */
   const restoreElementStyle = (elementRef: HTMLDivElement, element: GridElement | null) => {
     if (!element) return;
 
-    const absolutePos = anchorToAbsolute(element.position, anchorColumn());
-    const elementPos = getElementPosition(absolutePos);
+    const elementPos = getElementPosition(element.position);
     elementRef.style.position = 'absolute';
     elementRef.style.left = `${elementPos.left}px`;
     elementRef.style.top = `${elementPos.top}px`;
@@ -599,7 +678,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
     element: GridElement,
     newPosition: GridPosition,
     finalLayout: Map<string, GridPosition>,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     // newPosition 是绝对坐标，直接用于渲染
     const finalPixelPos = getElementPosition(newPosition);
@@ -625,10 +704,10 @@ export const GridContainer = (props: GridContainerProps = {}) => {
         'elements',
         (el: any) => el.id === elementId,
         'position',
-        anchorRelativePos
+        anchorRelativePos,
       );
     });
-    
+
     saveLayouts();
   };
 
@@ -646,156 +725,161 @@ export const GridContainer = (props: GridContainerProps = {}) => {
 
   return (
     <>
-    <div 
-      class="grid-area" 
-      ref={containerRef!}
-      onContextMenu={handleEmptyAreaContextMenu}
-    >
-      {/* 渲染所有 grid cell */}
-      <For each={gridCells()}>
-        {(cell) => {
-          const pos = createMemo(() => getElementPosition(cell));
-          return (
-            <div
-              class="grid-cell"
-              style={{
-                left: `${pos().left}px`,
-                top: `${pos().top}px`,
-              }}
-            />
-          );
-        }}
-      </For>
+      <div class="grid-area" ref={containerRef!} onContextMenu={handleEmptyAreaContextMenu}>
+        {/* 渲染所有 grid cell */}
+        <For each={gridCells()}>
+          {(cell) => {
+            const pos = createMemo(() => getElementPosition(cell));
+            return (
+              <div
+                class="grid-cell"
+                style={{
+                  left: `${pos().left}px`,
+                  top: `${pos().top}px`,
+                }}
+              />
+            );
+          }}
+        </For>
 
-      {/* 渲染所有元素 */}
-      <For each={elements()} fallback={null}>
-        {(element) => {
-          // 将元素转换为绝对坐标版本，供 DragSystem 使用
-          const elementWithAbsPos = createMemo(() => ({
-            ...element,
-            position: anchorToAbsolute(element.position, anchorColumn()),
-          }));
-          // 获取拖拽系统的显示位置（绝对坐标）
-          const displayPos = createMemo(() => dragSystem.getElementDisplayPosition(elementWithAbsPos()));
-          const width = createMemo(() => getElementWidthPx(element.size));
-          const height = createMemo(() => getElementHeightPx(element.size));
-          // 直接使用绝对坐标转换为像素位置
-          const position = createMemo(() => getElementPosition(displayPos()));
-          const isFixed = createMemo(() => element.fixed === true);
-          const isDragging = createMemo(() => dragSignals.isDragging()?.id === element.id);
+        {/* 渲染所有元素 */}
+        <For each={elements()} fallback={null}>
+          {(element) => {
+            // 将元素转换为绝对坐标版本，供 DragSystem 使用
+            const elementWithAbsPos = createMemo(() => ({
+              ...element,
+              position: anchorToAbsolute(element.position, anchorColumn()),
+            }));
+            // 获取拖拽系统的显示位置（绝对坐标）
+            const displayPos = createMemo(() =>
+              dragSystem.getElementDisplayPosition(elementWithAbsPos()),
+            );
+            const width = createMemo(() => getElementWidthPx(element.size));
+            const height = createMemo(() => getElementHeightPx(element.size));
+            // 直接使用绝对坐标转换为像素位置
+            const position = createMemo(() => getElementPosition(displayPos()));
+            const isFixed = createMemo(() => element.fixed === true);
+            const isDragging = createMemo(
+              () => dragSignals.isDragging() && dragSignals.draggedElement()?.id === element.id,
+            );
 
-          return (
-            <div
-              classList={{
-                'grid-element': true,
-                'grid-element--fixed': isFixed(),
-                'grid-element--dragging': isDragging(),
-              }}
-              data-element-id={element.id}
-              style={{
-                width: `${width()}px`,
-                height: `${height()}px`,
-                left: `${position().left}px`,
-                top: `${position().top}px`,
-                transition: isDragging() ? 'none' : undefined,
-                cursor: element.fixed ? 'default' : 'move',
-              }}
-              onMouseDown={(e) => {
-                const elementRef = e.currentTarget as HTMLDivElement;
-                handleMouseDown(element, elementRef, e);
-              }}
-              onContextMenu={(e) => handleContextMenu(element, e)}
-            >
-              {element.type === 'fixed' && (
-                <div class="grid-fixed-content">
-                  <FixedContentRenderer component={(element as any).component} />
-                </div>
-              )}
-
-              {element.type === 'widget' && (
-                <div class="grid-widget">
-                  <div class="grid-widget__content">
-                    <WidgetRenderer 
-                      component={(element as any).component}
-                      elementId={element.id}
-                      state={element.state}
-                      onStateChange={(newState) => updateElementState(element.id, newState)}
-                    />
+            return (
+              <div
+                classList={{
+                  'grid-element': true,
+                  'grid-element--fixed': isFixed(),
+                  'grid-element--dragging': isDragging(),
+                }}
+                data-element-id={element.id}
+                style={{
+                  width: `${width()}px`,
+                  height: `${height()}px`,
+                  left: `${position().left}px`,
+                  top: `${position().top}px`,
+                  transition: isDragging() ? 'none' : undefined,
+                  cursor: element.fixed ? 'default' : 'move',
+                }}
+                onMouseDown={(e) => {
+                  const elementRef = e.currentTarget as HTMLDivElement;
+                  // 必须传 absolute 坐标版本：DragSystem 内部全部用 absolute 坐标，
+                  // 包括 elementStartPos（dragOriginalPos）— 不能在这里传 anchor-rel
+                  handleMouseDown(elementWithAbsPos(), elementRef, e);
+                }}
+                onContextMenu={(e) => handleContextMenu(element, e)}
+              >
+                {element.type === 'fixed' && (
+                  <div class="grid-fixed-content">
+                    <FixedContentRenderer component={(element as any).component} />
                   </div>
-                </div>
-              )}
+                )}
 
-              {element.type === 'icon' && (
-                <GridIcon
-                  url={(element as any).data.url}
-                  name={(element as any).data.name}
-                />
-              )}
-            </div>
-          );
+                {element.type === 'widget' && (
+                  <div class="grid-widget">
+                    <div class="grid-widget__content">
+                      <WidgetRenderer
+                        component={(element as any).component}
+                        elementId={element.id}
+                        state={element.state}
+                        onStateChange={(newState) => updateElementState(element.id, newState)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {element.type === 'icon' && (
+                  <GridIcon url={(element as any).data.url} name={(element as any).data.name} />
+                )}
+              </div>
+            );
+          }}
+        </For>
+
+        {/* 拖拽阴影预览 */}
+        <ShadowPlaceholderRenderer dragSystem={dragSystem} />
+      </div>
+      <ContextMenuComponent />
+      <AddIconDialog
+        isOpen={isAddIconDialogOpen()}
+        onClose={() => {
+          setIsAddIconDialogOpen(false);
+          setRightClickPosition(null);
         }}
-      </For>
-
-      {/* 拖拽阴影预览 */}
-      <ShadowPlaceholderRenderer
-        dragSystem={dragSystem}
+        onConfirm={handleAddIconConfirm}
       />
-    </div>
-    <ContextMenuComponent />
-    <AddIconDialog
-      isOpen={isAddIconDialogOpen()}
-      onClose={() => {
-        setIsAddIconDialogOpen(false);
-        setRightClickPosition(null);
-      }}
-      onConfirm={handleAddIconConfirm}
-    />
-    <AddWidgetDialog
-      isOpen={isAddWidgetDialogOpen()}
-      onClose={() => {
-        setIsAddWidgetDialogOpen(false);
-        setRightClickPosition(null);
-      }}
-      onConfirm={handleAddWidgetConfirm}
-    />
-    <AddIconDialog
-      isOpen={isEditIconDialogOpen()}
-      isEditMode={true}
-      initialName={editingIconInitialName()}
-      initialUrl={editingIconInitialUrl()}
-      onClose={() => {
-        setIsEditIconDialogOpen(false);
-        setEditingIconId(null);
-      }}
-      onConfirm={handleEditIconConfirm}
-    />
-  </>
+      <AddWidgetDialog
+        isOpen={isAddWidgetDialogOpen()}
+        onClose={() => {
+          setIsAddWidgetDialogOpen(false);
+          setRightClickPosition(null);
+        }}
+        onConfirm={handleAddWidgetConfirm}
+      />
+      <AddIconDialog
+        isOpen={isEditIconDialogOpen()}
+        isEditMode={true}
+        initialName={editingIconInitialName()}
+        initialUrl={editingIconInitialUrl()}
+        onClose={() => {
+          setIsEditIconDialogOpen(false);
+          setEditingIconId(null);
+        }}
+        onConfirm={handleEditIconConfirm}
+      />
+    </>
   );
 };
 
 // 阴影预览渲染器组件
-function ShadowPlaceholderRenderer(props: {
-  dragSystem: ReturnType<typeof createDragSystem>;
-}) {
+function ShadowPlaceholderRenderer(props: { dragSystem: ReturnType<typeof createDragSystem> }) {
   const dragSignals = props.dragSystem.getSignals();
 
   return (
-    <Show when={dragSignals.isDragging()}>
+    <Show
+      when={
+        dragSignals.isDragging() &&
+        // 只在 calculateNewLayout 返回了有效布局时显示 placeholder（dragged 在 displaced 内 = 有效）；
+        // 空 Map = 无效 drop（含越界 / 撞固定元素 / 推开过远），此时不显示 placeholder，
+        // 让 widget 单独跟随 cursor，释放后弹回原处即可，不需要假的"原位置 placeholder"误导用户
+        dragSignals.displacedElements().has(dragSignals.draggedElement()?.id ?? '__none__') &&
+        dragSignals.draggedElement()
+      }
+    >
       {(draggedElement) => {
-        if (!draggedElement?.size) return null;
+        const el = () => draggedElement();
+        if (!el()?.size) return null;
 
         // DragSystem 使用绝对坐标
         const targetPos = createMemo(() => {
           const state = props.dragSystem.getState();
           const displaced = state.displacedElements;
-          if (displaced.has(draggedElement.id)) {
-            return displaced.get(draggedElement.id)!;
+          if (displaced.has(el().id)) {
+            return displaced.get(el().id)!;
           }
-          return draggedElement.position;
+          return el().position;
         });
 
-        const width = createMemo(() => getElementWidthPx(draggedElement.size));
-        const height = createMemo(() => getElementHeightPx(draggedElement.size));
+        const width = createMemo(() => getElementWidthPx(el().size));
+        const height = createMemo(() => getElementHeightPx(el().size));
         // 直接使用绝对坐标
         const pos = createMemo(() => getElementPosition(targetPos()));
 
@@ -816,7 +900,7 @@ function ShadowPlaceholderRenderer(props: {
 }
 
 // Widget 渲染器组件 - 使用 lazy 加载确保组件只创建一次
-function WidgetRenderer(props: { 
+function WidgetRenderer(props: {
   component: string;
   elementId: string;
   state: Record<string, unknown> | undefined;
@@ -828,7 +912,7 @@ function WidgetRenderer(props: {
 
   return (
     <Suspense fallback={<></>}>
-      <LazyComp 
+      <LazyComp
         elementId={props.elementId}
         state={props.state}
         onStateChange={props.onStateChange}
@@ -841,9 +925,11 @@ function WidgetRenderer(props: {
 function FixedContentRenderer(props: { component: string }) {
   const LazyComp = getLazyComponent(props.component);
 
+  if (!LazyComp) return <></>;
+
   return (
-    <Show when={LazyComp} fallback={<></>}>
-      {(Comp) => <Comp />}
-    </Show>
+    <Suspense fallback={<></>}>
+      <LazyComp />
+    </Suspense>
   );
 }
