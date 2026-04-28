@@ -436,10 +436,35 @@
           }
         },
         {
+          "id": "widget-stable-peg",
+          "type": "widget",
+          "component": "stable-peg",
+          "position": { "x": -3, "y": 0 },
+          "size": { "width": 2, "height": 2 },
+          "state": { "settings": {} }
+        },
+        {
+          "id": "widget-stable-yield",
+          "type": "widget",
+          "component": "stable-yield",
+          "position": { "x": -1, "y": 0 },
+          "size": { "width": 2, "height": 2 },
+          "state": { "settings": { "chain": "all" } }
+        },
+        {
+          "id": "widget-rwa-treasuries",
+          "type": "widget",
+          "component": "rwa-treasuries",
+          "position": { "x": 1, "y": 0 },
+          "size": { "width": 2, "height": 2 },
+          "state": { "settings": {} }
+        },
+
+        {
           "id": "icon-wallet-metamask",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -3, "y": 0 },
+          "position": { "x": -5, "y": 2 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "MetaMask", "url": "https://metamask.io", "category": "wallet" }
         },
@@ -447,7 +472,7 @@
           "id": "icon-wallet-phantom",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -2, "y": 0 },
+          "position": { "x": -4, "y": 2 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Phantom", "url": "https://phantom.app", "category": "wallet" }
         },
@@ -455,7 +480,7 @@
           "id": "icon-wallet-binance",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -1, "y": 0 },
+          "position": { "x": -3, "y": 2 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Binance Wallet", "url": "https://www.bnbchain.org/en/learn/wallet", "category": "wallet" }
         },
@@ -463,7 +488,7 @@
           "id": "icon-wallet-okx",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 0, "y": 0 },
+          "position": { "x": -2, "y": 2 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "OKX Wallet", "url": "https://www.okx.com/web3", "category": "wallet" }
         },
@@ -471,7 +496,7 @@
           "id": "icon-wallet-bitget",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 1, "y": 0 },
+          "position": { "x": -1, "y": 2 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Bitget Wallet", "url": "https://web3.bitget.com", "category": "wallet" }
         },
@@ -479,7 +504,7 @@
           "id": "icon-wallet-onekey",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 2, "y": 0 },
+          "position": { "x": 0, "y": 2 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "OneKey", "url": "https://onekey.so", "category": "wallet" }
         },
@@ -488,7 +513,7 @@
           "id": "icon-dex-uniswap",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -3, "y": 1 },
+          "position": { "x": -5, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Uniswap", "url": "https://app.uniswap.org", "category": "dex" }
         },
@@ -496,7 +521,7 @@
           "id": "icon-dex-pancakeswap",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -2, "y": 1 },
+          "position": { "x": -4, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "PancakeSwap", "url": "https://pancakeswap.finance", "category": "dex" }
         },
@@ -504,7 +529,7 @@
           "id": "icon-dex-1inch",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -1, "y": 1 },
+          "position": { "x": -3, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "1inch", "url": "https://1inch.com", "category": "dex" }
         },
@@ -512,16 +537,15 @@
           "id": "icon-dex-curve",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 0, "y": 1 },
+          "position": { "x": -2, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Curve", "url": "https://curve.fi", "category": "dex" }
         },
-
         {
           "id": "icon-explorer-etherscan",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -5, "y": 2 },
+          "position": { "x": -1, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Etherscan", "url": "https://etherscan.io", "category": "explorer" }
         },
@@ -529,7 +553,7 @@
           "id": "icon-explorer-solscan",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -4, "y": 2 },
+          "position": { "x": 0, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Solscan", "url": "https://solscan.io", "category": "explorer" }
         },
@@ -537,7 +561,7 @@
           "id": "icon-explorer-polygonscan",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -3, "y": 2 },
+          "position": { "x": 1, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Polygonscan", "url": "https://polygonscan.com", "category": "explorer" }
         },
@@ -545,7 +569,7 @@
           "id": "icon-explorer-blockchain",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -2, "y": 2 },
+          "position": { "x": 2, "y": 3 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Bitcoin Explorer", "url": "https://www.blockchain.com/explorer", "category": "explorer" }
         },
@@ -554,7 +578,7 @@
           "id": "icon-tool-dexscreener",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -5, "y": 3 },
+          "position": { "x": -5, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "DexScreener", "url": "https://dexscreener.com", "category": "tools" }
         },
@@ -562,7 +586,7 @@
           "id": "icon-tool-defillama",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -4, "y": 3 },
+          "position": { "x": -4, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "DefiLlama", "url": "https://defillama.com", "category": "tools" }
         },
@@ -570,7 +594,7 @@
           "id": "icon-tool-dune",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -3, "y": 3 },
+          "position": { "x": -3, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Dune", "url": "https://dune.com", "category": "tools" }
         },
@@ -578,7 +602,7 @@
           "id": "icon-tool-tokenomist",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -2, "y": 3 },
+          "position": { "x": -2, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Tokenomist", "url": "https://tokenomist.ai", "category": "tools" }
         },
@@ -586,7 +610,7 @@
           "id": "icon-tool-l2beat",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -1, "y": 3 },
+          "position": { "x": -1, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "L2BEAT", "url": "https://l2beat.com", "category": "tools" }
         },
@@ -594,7 +618,7 @@
           "id": "icon-tool-coinmarketcal",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 0, "y": 3 },
+          "position": { "x": 0, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "CoinMarketCal", "url": "https://coinmarketcal.com", "category": "tools" }
         },
@@ -602,7 +626,7 @@
           "id": "icon-tool-debank",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 1, "y": 3 },
+          "position": { "x": 1, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "DeBank", "url": "https://debank.com", "category": "tools" }
         },
@@ -610,7 +634,7 @@
           "id": "icon-tool-nansen",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 2, "y": 3 },
+          "position": { "x": 2, "y": 4 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Nansen", "url": "https://www.nansen.ai", "category": "tools" }
         },
@@ -619,7 +643,7 @@
           "id": "icon-perp-hyperliquid",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -5, "y": 4 },
+          "position": { "x": -5, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Hyperliquid", "url": "https://hyperliquid.xyz", "category": "perp" }
         },
@@ -627,7 +651,7 @@
           "id": "icon-perp-lighter",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -4, "y": 4 },
+          "position": { "x": -4, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Lighter", "url": "https://lighter.xyz", "category": "perp" }
         },
@@ -635,7 +659,7 @@
           "id": "icon-perp-aster",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -3, "y": 4 },
+          "position": { "x": -3, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Aster", "url": "https://www.asterdex.com", "category": "perp" }
         },
@@ -643,7 +667,7 @@
           "id": "icon-perp-edgex",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -2, "y": 4 },
+          "position": { "x": -2, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "edgeX", "url": "https://www.edgex.exchange", "category": "perp" }
         },
@@ -651,7 +675,7 @@
           "id": "icon-perp-gtrade",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -1, "y": 4 },
+          "position": { "x": -1, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "gTrade", "url": "https://gains.trade", "category": "perp" }
         },
@@ -659,7 +683,7 @@
           "id": "icon-perp-aevo",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 0, "y": 4 },
+          "position": { "x": 0, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Aevo", "url": "https://www.aevo.xyz", "category": "perp" }
         },
@@ -667,7 +691,7 @@
           "id": "icon-perp-dydx",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 1, "y": 4 },
+          "position": { "x": 1, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "dYdX", "url": "https://dydx.exchange", "category": "perp" }
         },
@@ -675,7 +699,7 @@
           "id": "icon-perp-gmx",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 2, "y": 4 },
+          "position": { "x": 2, "y": 5 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "GMX", "url": "https://gmx.io", "category": "perp" }
         },
@@ -684,7 +708,7 @@
           "id": "icon-rwa-ondo",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -5, "y": 5 },
+          "position": { "x": -5, "y": 6 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Ondo Finance", "url": "https://ondo.finance", "category": "rwa" }
         },
@@ -692,7 +716,7 @@
           "id": "icon-rwa-maple",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -4, "y": 5 },
+          "position": { "x": -4, "y": 6 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Maple Finance", "url": "https://www.maple.finance", "category": "rwa" }
         },
@@ -700,7 +724,7 @@
           "id": "icon-rwa-paxos",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -3, "y": 5 },
+          "position": { "x": -3, "y": 6 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Paxos", "url": "https://paxos.com", "category": "rwa" }
         },
@@ -708,7 +732,7 @@
           "id": "icon-rwa-tgold",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -2, "y": 5 },
+          "position": { "x": -2, "y": 6 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Tether Gold", "url": "https://gold.tether.to", "category": "rwa" }
         },
@@ -716,7 +740,7 @@
           "id": "icon-rwa-xyz",
           "type": "icon",
           "component": "icon",
-          "position": { "x": -1, "y": 5 },
+          "position": { "x": -1, "y": 6 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "rwa.xyz", "url": "https://www.rwa.xyz", "category": "rwa" }
         },
@@ -724,7 +748,7 @@
           "id": "icon-rwa-circle",
           "type": "icon",
           "component": "icon",
-          "position": { "x": 0, "y": 5 },
+          "position": { "x": 0, "y": 6 },
           "size": { "width": 1, "height": 1 },
           "data": { "name": "Circle", "url": "https://www.circle.com", "category": "rwa" }
         }

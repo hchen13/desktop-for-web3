@@ -3,11 +3,21 @@
  * 允许用户选择要添加的 Widget 组件
  */
 
-import { createSignal, Show, createEffect } from 'solid-js';
+import { createSignal, Show, createEffect, For } from 'solid-js';
 import { Portal } from '../components/layout/Portal';
 import { GRID_SIZES } from './types';
 
-export type WidgetType = 'calendar' | 'news' | 'watchlist' | 'chain-monitor' | 'world-clock' | 'econ-map' | 'rate-monitor';
+export type WidgetType =
+  | 'calendar'
+  | 'news'
+  | 'watchlist'
+  | 'chain-monitor'
+  | 'world-clock'
+  | 'econ-map'
+  | 'rate-monitor'
+  | 'stable-peg'
+  | 'stable-yield'
+  | 'rwa-treasuries';
 
 export interface WidgetOption {
   id: WidgetType;
@@ -59,6 +69,24 @@ const WIDGET_OPTIONS: WidgetOption[] = [
     description: '稳定币与法币实时汇率',
     size: GRID_SIZES.ICON,
   },
+  {
+    id: 'stable-peg',
+    name: '稳定币脱锚',
+    description: 'Top 稳定币脱锚监控（DefiLlama）',
+    size: GRID_SIZES.STANDARD_WIDGET,
+  },
+  {
+    id: 'stable-yield',
+    name: '稳定币利率',
+    description: '生息稳定币 APY 对比（DefiLlama）',
+    size: GRID_SIZES.STANDARD_WIDGET,
+  },
+  {
+    id: 'rwa-treasuries',
+    name: 'RWA 美债',
+    description: '代币化美债 AUM 与发行方分布',
+    size: GRID_SIZES.STANDARD_WIDGET,
+  },
 ];
 
 interface AddWidgetDialogProps {
@@ -108,26 +136,26 @@ export const AddWidgetDialog = (props: AddWidgetDialogProps) => {
             </div>
 
             <div class="add-widget-dialog__grid">
-              {WIDGET_OPTIONS.map((option) => (
-                <div
-                  classList={{
-                    'add-widget-dialog__option': true,
-                    'add-widget-dialog__option--selected': selectedWidget() === option.id,
-                  }}
-                  onClick={() => handleWidgetClick(option.id)}
-                  onDblClick={() => handleWidgetDoubleClick(option.id)}
-                >
-                  <div class="add-widget-dialog__option-header">
-                    <span class="add-widget-dialog__option-name">{option.name}</span>
-                    <span class="add-widget-dialog__option-size">
-                      {option.size.width}×{option.size.height}
-                    </span>
+              <For each={WIDGET_OPTIONS}>
+                {(option) => (
+                  <div
+                    classList={{
+                      'add-widget-dialog__option': true,
+                      'add-widget-dialog__option--selected': selectedWidget() === option.id,
+                    }}
+                    onClick={() => handleWidgetClick(option.id)}
+                    onDblClick={() => handleWidgetDoubleClick(option.id)}
+                  >
+                    <div class="add-widget-dialog__option-header">
+                      <span class="add-widget-dialog__option-name">{option.name}</span>
+                      <span class="add-widget-dialog__option-size">
+                        {option.size.width}×{option.size.height}
+                      </span>
+                    </div>
+                    <div class="add-widget-dialog__option-description">{option.description}</div>
                   </div>
-                  <div class="add-widget-dialog__option-description">
-                    {option.description}
-                  </div>
-                </div>
-              ))}
+                )}
+              </For>
             </div>
 
             <div class="add-widget-dialog__actions">

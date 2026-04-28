@@ -1,6 +1,6 @@
 /**
  * Widget Default Settings Configuration
- * 
+ *
  * 统一管理各 Widget 组件的默认设置
  * 每个 Widget 实例的设置存储在 GridElement.state.settings 中
  */
@@ -29,7 +29,7 @@ export interface ChainMonitorSettings {
 
 /** WorldClock 设置 - 存储时区列表 */
 export interface WorldClockSettings {
-  timezones: string[];  // 时区 ID 列表，如 ['Asia/Shanghai', 'America/New_York', 'Europe/London']
+  timezones: string[]; // 时区 ID 列表，如 ['Asia/Shanghai', 'America/New_York', 'Europe/London']
 }
 
 /** Calendar 设置 */
@@ -39,9 +39,9 @@ export interface CalendarSettings {
 
 /** Watchlist 币种配置（用于持久化） */
 export interface WatchlistCoinSetting {
-  symbol: string;       // 交易对，如 BTCUSDT
-  baseAsset: string;    // 基础资产，如 BTC
-  name: string;         // 币种全名
+  symbol: string; // 交易对，如 BTCUSDT
+  baseAsset: string; // 基础资产，如 BTC
+  name: string; // 币种全名
 }
 
 /** Watchlist 设置 */
@@ -54,6 +54,24 @@ export interface EconMapSettings {
   // 未来扩展
 }
 
+/** StablePeg 设置（暂无可配置项；保留扩展位） */
+export interface StablePegSettings {
+  // 未来扩展（如自定义跟踪 symbol）
+}
+
+/** StableYield 设置 */
+export interface StableYieldSettings {
+  /** 链 filter，如 'all' / 'ethereum' / 'solana' */
+  chain?: string;
+  /** 用户置顶的 pool ID 列表（按用户置顶顺序） */
+  pinned?: string[];
+}
+
+/** RWATreasuries 设置（暂无可配置项；保留扩展位） */
+export interface RWATreasuriesSettings {
+  // 未来扩展
+}
+
 /** 所有 Widget 设置的联合类型 */
 export type WidgetSettings =
   | RateMonitorSettings
@@ -63,6 +81,9 @@ export type WidgetSettings =
   | CalendarSettings
   | WatchlistSettings
   | EconMapSettings
+  | StablePegSettings
+  | StableYieldSettings
+  | RWATreasuriesSettings
   | Record<string, unknown>;
 
 /** Widget state 结构 */
@@ -108,6 +129,15 @@ export const DEFAULT_WATCHLIST_SETTINGS: WatchlistSettings = {
 
 export const DEFAULT_ECON_MAP_SETTINGS: EconMapSettings = {};
 
+export const DEFAULT_STABLE_PEG_SETTINGS: StablePegSettings = {};
+
+export const DEFAULT_STABLE_YIELD_SETTINGS: StableYieldSettings = {
+  chain: 'all',
+  pinned: [],
+};
+
+export const DEFAULT_RWA_TREASURIES_SETTINGS: RWATreasuriesSettings = {};
+
 // ============== 工具函数 ==============
 
 /**
@@ -129,6 +159,12 @@ export function getDefaultSettings(componentType: string): WidgetSettings {
       return { ...DEFAULT_WATCHLIST_SETTINGS };
     case 'econ-map':
       return { ...DEFAULT_ECON_MAP_SETTINGS };
+    case 'stable-peg':
+      return { ...DEFAULT_STABLE_PEG_SETTINGS };
+    case 'stable-yield':
+      return { ...DEFAULT_STABLE_YIELD_SETTINGS };
+    case 'rwa-treasuries':
+      return { ...DEFAULT_RWA_TREASURIES_SETTINGS };
     default:
       return {};
   }
@@ -140,11 +176,11 @@ export function getDefaultSettings(componentType: string): WidgetSettings {
  */
 export function getStateWithDefaults(
   componentType: string,
-  existingState?: Record<string, unknown>
+  existingState?: Record<string, unknown>,
 ): WidgetState {
   const defaults = getDefaultSettings(componentType);
   const existingSettings = existingState?.settings as WidgetSettings | undefined;
-  
+
   return {
     ...existingState,
     settings: {

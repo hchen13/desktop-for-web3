@@ -1,0 +1,159 @@
+.rwa-treasuries-widget {
+  background: #0a0b0d;
+  border: 1px solid #1c1f24;
+  border-radius: var(--radius-lg);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.rwa-treasuries-widget__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  min-height: 28px;
+  gap: 8px;
+}
+
+.rwa-treasuries-widget__title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rwa-treasuries-widget__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.rwa-treasuries-widget__aum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.rwa-treasuries-widget__aum-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.2;
+  text-align: right;
+}
+
+.rwa-treasuries-widget__aum-arrow--up { color: var(--green-up); }
+.rwa-treasuries-widget__aum-arrow--down { color: var(--red-down); }
+
+.rwa-treasuries-widget__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rwa-bar-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  cursor: default;
+  border-radius: 4px;
+  transition: background 0.12s;
+  padding: 2px 4px;
+  margin: 0 -4px;
+}
+
+.rwa-bar-row--clickable {
+  cursor: pointer;
+}
+
+.rwa-bar-row--clickable:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rwa-bar-row__symbol {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rwa-bar-row__bar {
+  position: relative;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.rwa-bar-row__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--terminal-blue);
+  border-radius: 2px;
+  transition: width 0.4s ease-out;
+}
+
+.rwa-bar-row__values {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.rwa-bar-row__amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.rwa-bar-row__delta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1;
+}
+
+.rwa-bar-row__delta--up { color: var(--green-up); }
+.rwa-bar-row__delta--down { color: var(--red-down); }
+
+.rwa-treasuries-widget__loading,
+.rwa-treasuries-widget__error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: var(--font-mono);
+  text-align: center;
+  padding: 16px;
+}
