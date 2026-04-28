@@ -6,6 +6,15 @@
   "chrome_url_overrides": {
     "newtab": "src/newtab/index.html"
   },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "添加到 Web3 桌面",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

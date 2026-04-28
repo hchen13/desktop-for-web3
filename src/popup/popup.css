@@ -1,0 +1,171 @@
+/* Popup UI — Bloomberg terminal 风格，紧凑 */
+:root {
+  --bg-root: #0a0b0d;
+  --bg-panel: #14161a;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --text-primary: #fff;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-tertiary: rgba(255, 255, 255, 0.35);
+  --accent: #0095ff;
+  --accent-hover: #1aa3ff;
+  --danger: #ff4757;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 340px;
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+}
+
+#popup-root {
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.popup-header__title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.popup-page-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.popup-page-card__favicon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.popup-page-card__info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.popup-page-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popup-page-card__url {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popup-section-label {
+  padding: 10px 14px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.popup-desktop-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px;
+  gap: 2px;
+}
+
+.popup-desktop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.popup-desktop-item:hover {
+  background: var(--bg-hover);
+}
+
+.popup-desktop-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.popup-desktop-item__name {
+  font-weight: 500;
+}
+
+.popup-desktop-item__count {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.popup-status {
+  padding: 10px 14px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.popup-status--success {
+  color: var(--accent);
+  background: rgba(0, 149, 255, 0.08);
+  border-top: 1px solid var(--border);
+}
+
+.popup-status--error {
+  color: var(--danger);
+}
+
+.popup-status--loading {
+  color: var(--text-secondary);
+}
+
+.popup-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
