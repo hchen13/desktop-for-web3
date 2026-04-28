@@ -62,3 +62,8 @@ worker/dist
 
 # IDE specific
 .codebuddy
+
+# Testing artifacts
+coverage/
+tests/diagnostic-output/
+tests/screenshots/

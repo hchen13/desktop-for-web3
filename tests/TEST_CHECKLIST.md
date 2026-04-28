@@ -87,12 +87,15 @@
 
 ### 计算公式参考
 ```
-Grid 单元尺寸 = 86px (GRID_UNIT) - 更新于 2025-01-14
-Grid 间隙 = 8px (GRID_GAP)
-单元格尺寸 = 86 + 8 = 94px
+Grid 单元尺寸 = 100px (GRID_UNIT)
+Grid 间隙   = 20px (GRID_GAP)
+单元格尺寸  = 100 + 20 = 120px
 
-Grid 列数 = floor((viewport宽度 - 72 - 32) / 94)
-Grid 区域宽度 = 列数 × 86 + (列数 - 1) × 8
+Grid 左侧 padding = 56px（Sidebar 空间），右侧 padding = 16px
+Grid 列数 = floor((viewport宽度 - 56 - 16) / 120)
+Grid 区域宽度 = 列数 × 100 + (列数 - 1) × 20
+
+注：以 src/grid/types.ts 为准（GRID_UNIT / GRID_GAP / GRID_CONFIG）。
 ```
 
 ---
@@ -109,11 +112,11 @@ Grid 区域宽度 = 列数 × 86 + (列数 - 1) × 8
 4. 验证尺寸是否符合设计规范
 
 **预期结果（所有视口尺寸）:**
-- 图标: 72px × 72px
-- 资讯宽度: 152px (2 × 72 + 8)
-- Grid Unit: 72px
-- Grid Gap: 8px
-- 图标间间隙: 8px
+- 图标: 100px × 100px
+- 资讯宽度: 220px (2 × 100 + 20)
+- Grid Unit: 100px
+- Grid Gap: 20px
+- 图标间间隙: 20px
 
 ### 失败诊断
 - 如果尺寸变化: 检查是否使用了百分比或其他相对单位
@@ -128,11 +131,13 @@ Grid 区域宽度 = 列数 × 86 + (列数 - 1) × 8
 
 ### 测试数据参考
 
+Sidebar + 左右 padding 共占用 72px（左 56 + 右 16），单元格 120px（GRID_UNIT 100 + GRID_GAP 20），Grid 区域宽度 = 列数 × 100 + (列数 − 1) × 20。
+
 | 视口宽度 | Sidebar + Padding | 可用宽度 | 列数 | Grid 区域宽度 |
 |----------|-------------------|----------|------|--------------|
-| 1200px | 104px | 1096px | 13 | 1032px |
-| 1920px | 104px | 1816px | 22 | 1752px |
-| 2560px | 104px | 2456px | 30 | 2392px |
+| 1200px | 72px | 1128px | 9  | 1060px |
+| 1920px | 72px | 1848px | 15 | 1780px |
+| 2560px | 72px | 2488px | 20 | 2380px |
 
 ### 验证步骤
 1. 在不同视口宽度下获取 `.grid-area` 的实际宽度
@@ -262,8 +267,8 @@ Grid 区域宽度 = 列数 × 86 + (列数 - 1) × 8
 **预期结果:**
 - 窗口变大时: Grid 列数增加，显示更多空白区域
 - 窗口变小时: Grid 列数减少（最小6列）
-- 元素尺寸始终保持 72px 单元大小
-- 元素间隙始终保持 8px
+- 元素尺寸始终保持 100px 单元大小（GRID_UNIT）
+- 元素间隙始终保持 20px（GRID_GAP）
 
 ---
 
@@ -327,11 +332,11 @@ lsof -ti :5173-5180 | xargs kill -9 2>/dev/null
 # 启动开发服务器
 npm run dev
 
-# 构建检查
+# 构建检查（也是当前唯一的类型校验入口）
 npm run build
 
-# 类型检查
-npm run type-check
+# 临时类型检查（package.json 未提供 type-check 脚本）
+npx tsc --noEmit
 
 # 清理后台进程（测试后执行）
 pkill -f "npm run dev" && pkill -f "vite"
@@ -346,7 +351,7 @@ pkill -f "npm run dev" && pkill -f "vite"
 - [ ] **默认组件完整**: 所有 14 个组件正确显示
 - [ ] **Grid 居中**: Grid 区域在容器中水平居中
 - [ ] **搜索框居中**: 搜索框尽可能居中（误差 ≤ 0.5 列）
-- [ ] **Grid Unit 固定**: 所有视口下保持 72px
+- [ ] **Grid Unit 固定**: 所有视口下保持 100px
 - [ ] **动态列数**: 列数根据视口正确计算
 - [ ] **固定元素不可拖拽**: 时间和搜索框无法被拖拽
 - [ ] **可拖拽元素可拖拽**: 图标和 Widget 可正常拖拽
