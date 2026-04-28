@@ -1,0 +1,7 @@
+dist/
+worker/dist/
+worker/node_modules/
+node_modules/
+tests/screenshots/
+coverage/
+package-lock.json
