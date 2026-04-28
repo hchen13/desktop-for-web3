@@ -22,6 +22,12 @@
   },
   "permissions": ["storage", "tabs", "favicon"],
   "host_permissions": [
+    "https://www.okx.com/*",
+    "https://api.bitget.com/*",
+    "https://api.bybit.com/*",
+    "https://api.exchange.coinbase.com/*",
+    "https://hermes.pyth.network/*",
+    "https://api.coingecko.com/*",
     "https://api.binance.com/*",
     "https://www.binance.com/*",
     "https://api.binance.us/*",
@@ -39,6 +45,6 @@
     "https://api.rss2json.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https: data: blob: chrome-extension: ;"
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' https: data: blob: chrome-extension: ; connect-src 'self' https: wss: ;"
   }
 }

@@ -37,11 +37,14 @@ export interface CalendarSettings {
   view: 'full' | 'compact';
 }
 
-/** Watchlist 币种配置（用于持久化） */
+/** Watchlist 资产配置（用于持久化） */
 export interface WatchlistCoinSetting {
-  symbol: string; // 交易对，如 BTCUSDT
-  baseAsset: string; // 基础资产，如 BTC
-  name: string; // 币种全名
+  /** canonical 用户面 ticker，如 'BTC' / 'NVDA' / 'XAU' */
+  symbol: string;
+  /** 全名，如 'Bitcoin' */
+  name: string;
+  /** 资产类别 */
+  category: 'crypto' | 'stock' | 'etf' | 'fx' | 'commodity';
 }
 
 /** Watchlist 设置 */
@@ -119,11 +122,12 @@ export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
 
 export const DEFAULT_WATCHLIST_SETTINGS: WatchlistSettings = {
   coins: [
-    { symbol: 'BTCUSDT', baseAsset: 'BTC', name: 'Bitcoin' },
-    { symbol: 'ETHUSDT', baseAsset: 'ETH', name: 'Ethereum' },
-    { symbol: 'SOLUSDT', baseAsset: 'SOL', name: 'Solana' },
-    { symbol: 'XRPUSDT', baseAsset: 'XRP', name: 'XRP' },
-    { symbol: 'BNBUSDT', baseAsset: 'BNB', name: 'BNB' },
+    { symbol: 'BTC', name: 'Bitcoin', category: 'crypto' },
+    { symbol: 'ETH', name: 'Ethereum', category: 'crypto' },
+    { symbol: 'SOL', name: 'Solana', category: 'crypto' },
+    { symbol: 'NVDA', name: 'NVIDIA', category: 'stock' },
+    { symbol: 'TSLA', name: 'Tesla', category: 'stock' },
+    { symbol: 'SPY', name: 'SPDR S&P 500', category: 'etf' },
   ],
 };
 

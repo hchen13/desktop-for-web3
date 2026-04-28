@@ -67,7 +67,14 @@
           "size": { "width": 2, "height": 2 },
           "state": {
             "settings": {
-              "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+              "coins": [
+                { "symbol": "BTC", "name": "Bitcoin", "category": "crypto" },
+                { "symbol": "ETH", "name": "Ethereum", "category": "crypto" },
+                { "symbol": "SOL", "name": "Solana", "category": "crypto" },
+                { "symbol": "NVDA", "name": "NVIDIA", "category": "stock" },
+                { "symbol": "TSLA", "name": "Tesla", "category": "stock" },
+                { "symbol": "SPY", "name": "SPDR S&P 500", "category": "etf" }
+              ]
             }
           }
         },
@@ -199,7 +206,14 @@
           "size": { "width": 2, "height": 2 },
           "state": {
             "settings": {
-              "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+              "coins": [
+                { "symbol": "BTC", "name": "Bitcoin", "category": "crypto" },
+                { "symbol": "ETH", "name": "Ethereum", "category": "crypto" },
+                { "symbol": "SOL", "name": "Solana", "category": "crypto" },
+                { "symbol": "NVDA", "name": "NVIDIA", "category": "stock" },
+                { "symbol": "TSLA", "name": "Tesla", "category": "stock" },
+                { "symbol": "SPY", "name": "SPDR S&P 500", "category": "etf" }
+              ]
             }
           }
         },
