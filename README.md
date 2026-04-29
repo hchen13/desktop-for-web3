@@ -159,7 +159,7 @@ src/
 
 ### 品牌图标
 
-扩展图标位于 `src/icons/`，并由 `src/manifest.json` 引用：
+扩展打包图标位于 `public/icons/`，并由 `src/manifest.json` 引用：
 
 - `icon16.png`
 - `icon48.png`

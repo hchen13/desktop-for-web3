@@ -98,7 +98,7 @@ npm run worker:deploy
 | 新 Widget | 新建 `src/components/Widgets/<Name>Widget.tsx` + 在 `src/components/Widgets/index.ts` 导出 + 在 `GridContainer.tsx` 中 `lazy()` 注册 |
 | 新预设布局 | `src/config/defaultLayouts.json` |
 | 新快捷图标 | `src/grid/tabIconConfig.ts` |
-| 扩展品牌图标 | `src/icons/`；设计源在 `design/logo-options/raster-selected/` |
+| 扩展品牌图标 | `public/icons/`；设计源在 `design/logo-options/raster-selected/` |
 | 新链上数据源 | `src/services/chain-monitor/` 下加客户端，并在 `chainMonitorService.ts` 接入回退链 |
 | Popup UI 调整 | `src/popup/popup.tsx` + `popup.css`；新增 popup→newtab 通道走 `pendingIconAdds` storage key |
 
