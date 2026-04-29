@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" width="96" height="96" alt="Desktop for Web3 logo" />
+</p>
+
 # Desktop for Web3
 
 > 专为 Web3 从业者设计的 Chrome 新标签页扩展。将新标签页转变为信息仪表板，支持拖拽式布局、实时区块链监控、价格跟踪和聚合新闻。
