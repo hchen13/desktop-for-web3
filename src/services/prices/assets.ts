@@ -12,6 +12,7 @@
  */
 
 import type { AssetMeta } from './types';
+import { dynamicCatalog } from './dynamicCatalog';
 
 // ============ Logo helpers ============
 // 多源回退：jsDelivr cryptocurrency-icons (Top ~50) → coinpaprika (覆盖广，需 symbol-name slug)
@@ -1542,9 +1543,6 @@ const ASSET_INDEX = new Map<string, AssetMeta>(ASSETS.map((a) => [a.symbol, a]))
 export function getAssetMeta(symbol: string): AssetMeta | undefined {
   const curated = ASSET_INDEX.get(symbol);
   if (curated) return curated;
-  // Lazy import 避免循环依赖
-
-  const { dynamicCatalog } = require('./dynamicCatalog') as typeof import('./dynamicCatalog');
   return dynamicCatalog.get(symbol) ?? undefined;
 }
 
