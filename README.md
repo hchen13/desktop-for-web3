@@ -65,6 +65,8 @@ npm run build
 # 在 chrome://extensions/ 加载解压的扩展
 ```
 
+> 注意：`npm run dev` 会让 CRXJS 在 `dist/manifest.json` 中写入开发态 service worker（指向 localhost）。发布或换机器加载前请重新执行 `rm -rf dist && npm run build`，不要直接加载跑过 dev 的 `dist/`。`npm run build` 会自动校验生产 manifest，防止 dev service worker 混入。
+
 ### Worker 服务（可选）
 
 如需使用完整的链上监控功能，可部署 Cloudflare Worker：
@@ -150,6 +152,16 @@ src/
 ```
 
 ## 配置
+
+### 品牌图标
+
+扩展图标位于 `src/icons/`，并由 `src/manifest.json` 引用：
+
+- `icon16.png`
+- `icon48.png`
+- `icon128.png`
+
+高分辨率设计源和备用尺寸保留在 `design/logo-options/raster-selected/`。
 
 ### 自定义默认布局
 

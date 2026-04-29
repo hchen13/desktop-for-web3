@@ -34,6 +34,8 @@ npm run worker:deploy
 
 **MV3 注意**：`http://localhost:5173/src/newtab/index.html` 是 Vite 预览页，不是真实扩展上下文——`chrome.storage.local`、`chrome-extension://` 协议下的资源解析等只有在 `dist/` 加载到 Chrome 后才完整工作。功能验收必须用打包后的扩展。
 
+**CRXJS dev manifest 注意**：`npm run dev` 会把 `dist/manifest.json` 改写为开发态 manifest，并注入 `background.service_worker = "service-worker-loader.js"`，该 worker 会 import localhost 的 Vite/CRXJS HMR 客户端。发布、换机加载或手动验收前必须重新执行 `rm -rf dist && npm run build`；不要加载跑过 dev 的 `dist/`。`npm run build` 已串联 `tests/validate-production-manifest.cjs`，会拦截 dev service worker 和 CRXJS dev `web_accessible_resources`。
+
 ## 架构关键点
 
 ### Grid System
@@ -96,6 +98,7 @@ npm run worker:deploy
 | 新 Widget | 新建 `src/components/Widgets/<Name>Widget.tsx` + 在 `src/components/Widgets/index.ts` 导出 + 在 `GridContainer.tsx` 中 `lazy()` 注册 |
 | 新预设布局 | `src/config/defaultLayouts.json` |
 | 新快捷图标 | `src/grid/tabIconConfig.ts` |
+| 扩展品牌图标 | `src/icons/`；设计源在 `design/logo-options/raster-selected/` |
 | 新链上数据源 | `src/services/chain-monitor/` 下加客户端，并在 `chainMonitorService.ts` 接入回退链 |
 | Popup UI 调整 | `src/popup/popup.tsx` + `popup.css`；新增 popup→newtab 通道走 `pendingIconAdds` storage key |
 
