@@ -13,29 +13,70 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const SunIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7 7 0 1 0 20.5 14.5Z" />
+  </svg>
+);
+
 export const SettingsButton = () => {
   const { ContextMenuComponent, showContextMenu } = useContextMenu();
+
+  const handleThemeChange = (theme: 'light' | 'dark', event: MouseEvent) => {
+    event.stopPropagation();
+    setThemeMode(theme);
+  };
+
+  const ThemeSwitch = () => {
+    const theme = () => currentThemeMode();
+
+    return (
+      <div class="settings-theme-row">
+        <span class="settings-theme-row__label">主题</span>
+        <div class="settings-theme-switch" role="group" aria-label="主题">
+          <button
+            classList={{
+              'settings-theme-switch__button': true,
+              'settings-theme-switch__button--active': theme() === 'light',
+            }}
+            title="亮色主题"
+            aria-label="亮色主题"
+            aria-pressed={theme() === 'light'}
+            onClick={(event) => handleThemeChange('light', event)}
+          >
+            <SunIcon />
+          </button>
+          <button
+            classList={{
+              'settings-theme-switch__button': true,
+              'settings-theme-switch__button--active': theme() === 'dark',
+            }}
+            title="暗色主题"
+            aria-label="暗色主题"
+            aria-pressed={theme() === 'dark'}
+            onClick={(event) => handleThemeChange('dark', event)}
+          >
+            <MoonIcon />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation();
 
-    const theme = currentThemeMode();
-
     showContextMenu(e.clientX, e.clientY, [
       {
-        label: `当前主题：${theme === 'light' ? '亮色' : '暗色'}`,
-        disabled: true,
-        action: () => {},
-      },
-      {
-        label: '使用亮色主题',
-        disabled: theme === 'light',
-        action: () => setThemeMode('light'),
-      },
-      {
-        label: '使用暗色主题',
-        disabled: theme === 'dark',
-        action: () => setThemeMode('dark'),
+        label: '主题',
+        render: ThemeSwitch,
       },
       {
         label: '重置默认布局',

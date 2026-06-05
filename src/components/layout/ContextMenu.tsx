@@ -10,11 +10,13 @@ export interface ContextMenuItem {
   /** 菜单项标签 */
   label: string;
   /** 点击回调 */
-  action: () => void;
+  action?: () => void;
   /** 是否危险操作（如删除） */
   variant?: 'normal' | 'danger';
   /** 是否禁用 */
   disabled?: boolean;
+  /** 自定义菜单行 */
+  render?: () => JSX.Element;
 }
 
 interface ContextMenuProps {
@@ -99,7 +101,7 @@ export const ContextMenu = (props: ContextMenuProps) => {
   // 菜单项点击处理
   const handleItemClick = (item: ContextMenuItem) => {
     if (item.disabled) return;
-    item.action();
+    item.action?.();
     props.onClose();
   };
 
@@ -130,17 +132,27 @@ export const ContextMenu = (props: ContextMenuProps) => {
           <div ref={contentRef} class="context-menu__content">
             <For each={props.items}>
               {(item) => (
-                <button
-                  classList={{
-                    'context-menu__item': true,
-                    'context-menu__item--danger': item.variant === 'danger',
-                    'context-menu__item--disabled': item.disabled,
-                  }}
-                  onClick={() => handleItemClick(item)}
-                  disabled={item.disabled}
+                <Show
+                  when={item.render}
+                  keyed
+                  fallback={
+                    <button
+                      classList={{
+                        'context-menu__item': true,
+                        'context-menu__item--danger': item.variant === 'danger',
+                        'context-menu__item--disabled': item.disabled,
+                      }}
+                      onClick={() => handleItemClick(item)}
+                      disabled={item.disabled}
+                    >
+                      {item.label}
+                    </button>
+                  }
                 >
-                  {item.label}
-                </button>
+                  {(render) => (
+                    <div class="context-menu__item context-menu__item--custom">{render()}</div>
+                  )}
+                </Show>
               )}
             </For>
           </div>

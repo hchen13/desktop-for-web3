@@ -9,20 +9,17 @@ type WidgetStatus = 'syncing' | 'live' | 'cached' | 'error';
 
 const REFRESH_INTERVAL_MS = 60 * 1000;
 
-const formatCompactUsd = (value: number): string => {
-  if (value >= 1000) return `$${(value / 1000).toFixed(value >= 100000 ? 0 : 1)}K`;
-  return `$${value.toFixed(0)}`;
-};
+const usdFormatter = new Intl.NumberFormat('en-US', {
+  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+});
+
+const formatUsd = (value: number): string => `$${usdFormatter.format(value)}`;
 
 const formatChange = (value: number | null): string => {
   if (value === null) return '--';
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
-};
-
-const formatDate = (date: string): string => {
-  const [, month, day] = date.split('-');
-  return month && day ? `${month}/${day}` : date;
 };
 
 export const BtcRealizedPriceWidget = () => {
@@ -102,14 +99,11 @@ export const BtcRealizedPriceWidget = () => {
       >
         {(data) => (
           <>
-            <div class="btc-realized__value">{formatCompactUsd(data().realizedPrice)}</div>
+            <div class="btc-realized__value">{formatUsd(data().realizedPrice)}</div>
             <div class={`btc-realized__change btc-realized__change--${changeClass()}`}>
               {formatChange(data().change24hPct)} 24H
             </div>
-            <div class="btc-realized__footer">
-              <span>{formatDate(data().latestDate)}</span>
-              <span>{data().source}</span>
-            </div>
+            <div class="btc-realized__footer" />
           </>
         )}
       </Show>

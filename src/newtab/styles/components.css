@@ -467,6 +467,14 @@
   background: var(--bg-control-hover);
 }
 
+.context-menu__item--custom {
+  cursor: default;
+}
+
+.context-menu__item--custom:hover {
+  background: transparent;
+}
+
 .context-menu__item--danger {
   color: #ff6b6b;
 }
