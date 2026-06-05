@@ -123,6 +123,13 @@ export class PriceService {
     return this.rankedAdapters.map((a) => a.name);
   }
 
+  async __waitForStartupForTest(): Promise<void> {
+    await this.ensureStarted();
+    if (this.probePromise) {
+      await this.probePromise;
+    }
+  }
+
   // ============ 内部 ============
 
   private unionSymbols(): Set<string> {

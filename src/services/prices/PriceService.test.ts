@@ -48,6 +48,16 @@ function snap(symbol: string, price: number, source = 'okx'): PriceSnapshot {
   };
 }
 
+beforeEach(() => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.includes('/v2/price_feeds')) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    return new Response(JSON.stringify({ parsed: [] }), { status: 200 });
+  });
+});
+
 describe('PriceService — probe & ranked adapters', () => {
   let svc: PriceService;
   beforeEach(() => {
@@ -64,13 +74,8 @@ describe('PriceService — probe & ranked adapters', () => {
     const c = makeAdapter('c', { latency: 100 });
     svc.__setAdaptersForTest([a, b, c]);
 
-    // 通过 fetchOnce 触发 probe
     svc.subscribe(new Set(['BTC']), () => {});
-    await new Promise((r) => setTimeout(r, 0));
-    // wait microtask
-    await Promise.resolve();
-    // ensureStarted 是异步的，强制一次 refresh 等 probe
-    await svc.refresh(new Set(['BTC']));
+    await svc.__waitForStartupForTest();
 
     const ranked = svc.__getRankedAdapters();
     expect(ranked.slice(0, 3)).toEqual(['b', 'c', 'a']);
@@ -82,6 +87,7 @@ describe('PriceService — probe & ranked adapters', () => {
     svc.__setAdaptersForTest([a, b]);
 
     svc.subscribe(new Set(['BTC']), () => {});
+    await svc.__waitForStartupForTest();
     await svc.refresh(new Set(['BTC']));
     const ranked = svc.__getRankedAdapters();
     expect(ranked[0]).toBe('a');
@@ -177,10 +183,6 @@ describe('PriceService — fallback & error handling', () => {
   let svc: PriceService;
   beforeEach(() => {
     svc = new PriceService();
-    // 默认让 Pyth fetch 返回空 parsed，避免影响测试
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ parsed: [] }), { status: 200 }),
-    );
   });
   afterEach(() => {
     svc.__resetForTest();
@@ -242,8 +244,12 @@ describe('PriceService — Pyth integration', () => {
     svc.__setAdaptersForTest([makeAdapter('okx', { fetchResult: cexResult })]);
 
     // mock fetch 用于 Pyth latest（globalThis.fetch）
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/v2/price_feeds')) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      return new Response(
         JSON.stringify({
           parsed: [
             {
@@ -253,8 +259,8 @@ describe('PriceService — Pyth integration', () => {
           ],
         }),
         { status: 200 },
-      ),
-    );
+      );
+    });
 
     svc.subscribe(new Set(['BTC']), () => {});
     await svc.refresh();
@@ -272,9 +278,6 @@ describe('PriceService — chrome.storage 持久化', () => {
   beforeEach(() => {
     svc = new PriceService();
     (globalThis as any).__memoryStorage?.__reset?.();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ parsed: [] }), { status: 200 }),
-    );
   });
   afterEach(() => {
     svc.__resetForTest();
