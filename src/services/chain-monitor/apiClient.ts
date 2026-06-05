@@ -5,6 +5,7 @@
 
 // Worker URL 配置
 let WORKER_URL = 'https://desktop-for-web3-api-proxy.gradients-tech.workers.dev';
+const WORKER_TIMEOUT_MS = 12_000;
 
 /**
  * Worker API 响应类型
@@ -29,10 +30,10 @@ async function callWorkerAPI<T = any>(
     method?: 'GET' | 'POST';
     params?: Record<string, any>;
     body?: any;
-  } = {}
+  } = {},
 ): Promise<WorkerResponse<T>> {
   const url = new URL(endpoint, WORKER_URL);
-  
+
   // 添加查询参数
   if (options.params) {
     Object.entries(options.params).forEach(([key, value]) => {
@@ -42,6 +43,9 @@ async function callWorkerAPI<T = any>(
     });
   }
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS);
+
   try {
     const response = await fetch(url.toString(), {
       method: options.method || 'GET',
@@ -49,6 +53,7 @@ async function callWorkerAPI<T = any>(
         'Content-Type': 'application/json',
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -61,13 +66,12 @@ async function callWorkerAPI<T = any>(
       }
 
       throw new Error(
-        errorData?.error?.message || 
-        `Worker API error: ${response.status} ${response.statusText}`
+        errorData?.error?.message || `Worker API error: ${response.status} ${response.statusText}`,
       );
     }
 
     const data: WorkerResponse<T> = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.error?.message || 'Unknown error from Worker API');
     }
@@ -78,6 +82,8 @@ async function callWorkerAPI<T = any>(
     // Worker API 失败是预期行为，上层有 fallback 机制
     console.debug('[Worker API] Request failed:', error);
     throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 
@@ -164,19 +170,24 @@ export const workerAPI = {
      * @param symbols 币种符号数组，如 ['BTC', 'ETH', 'SOL']
      */
     getQuotes: async (symbols: string[]) => {
-      return callWorkerAPI<Record<string, {
-        id: number;
-        name: string;
-        symbol: string;
-        quote: {
-          USD: {
-            price: number;
-            volume_24h: number;
-            percent_change_24h: number;
-            market_cap: number;
-          };
-        };
-      }>>('/api/coinmarketcap/quotes', {
+      return callWorkerAPI<
+        Record<
+          string,
+          {
+            id: number;
+            name: string;
+            symbol: string;
+            quote: {
+              USD: {
+                price: number;
+                volume_24h: number;
+                percent_change_24h: number;
+                market_cap: number;
+              };
+            };
+          }
+        >
+      >('/api/coinmarketcap/quotes', {
         params: { symbols: symbols.join(',') },
       });
     },

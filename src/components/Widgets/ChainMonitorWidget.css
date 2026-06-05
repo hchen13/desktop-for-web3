@@ -39,6 +39,25 @@
   font-family: 'Inter', sans-serif;
 }
 
+.chain-monitor-status {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 2;
+  max-width: calc(100% - 20px);
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--widget-bg-elevated, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--widget-divider);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 /* Chain Selector */
 .chain-selector {
   position: relative;

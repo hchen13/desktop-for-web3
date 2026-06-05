@@ -9,7 +9,11 @@ import { Portal } from '../layout/Portal';
 import { useContextMenu } from '../layout/ContextMenu';
 import type { ContextMenuItem } from '../layout/ContextMenu';
 import { mergeMenuItems, getElementIdFromEvent } from '../../grid/contextMenuUtils';
-import { SUPPORTED_CHAINS, getChainConfig, DEFAULT_CHAINS, isChainSupported } from '../../config/chainMonitorConfig';
+import {
+  SUPPORTED_CHAINS,
+  getChainConfig,
+  isChainSupported,
+} from '../../config/chainMonitorConfig';
 import type { ChainId, ChainMetrics } from '../../services/chain-monitor/types';
 import { getDominantColor } from '../../utils/imageColorExtractor';
 import { chainMonitorService } from '../../services/chain-monitor/chainMonitorService';
@@ -24,7 +28,6 @@ const timeIcon = '/icons/blockchain-monitor/time.svg';
 const gasIcon = '/icons/blockchain-monitor/gas.svg';
 const tpsIcon = '/icons/blockchain-monitor/tps.svg';
 const tvlIcon = '/icons/blockchain-monitor/tvl.svg';
-
 
 // 获取链的颜色
 const getChainColor = (chainId: ChainId): string => {
@@ -47,10 +50,12 @@ const rgbToHex = (rgb: string): string => {
   const r = parseInt(match[1]);
   const g = parseInt(match[2]);
   const b = parseInt(match[3]);
-  return `#${[r, g, b].map(x => {
-    const hex = x.toString(16);
-    return hex.length === 1 ? '0' + hex : hex;
-  }).join('')}`;
+  return `#${[r, g, b]
+    .map((x) => {
+      const hex = x.toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    })
+    .join('')}`;
 };
 
 // 链选择器下拉菜单
@@ -167,7 +172,7 @@ const ChainSelector = (props: {
 
       <Show when={props.activeAddresses !== undefined}>
         <div class="chain-selector__users-badge">
-          <span class="chain-selector__users-dot"></span>
+          <span class="chain-selector__users-dot" />
           <span class="chain-selector__users-text">
             {props.activeAddresses || 0}
             {props.activeAddressesUnit || 'k'}
@@ -233,7 +238,6 @@ const EVMChainView = (props: {
   activeAddressesUnit?: string;
 }) => {
   const chainColor = () => props.chainColor || getChainColor(props.chain);
-  const chainConfig = getChainConfig(props.chain);
 
   return (
     <div class="chain-monitor-card chain-monitor-card--evm">
@@ -249,19 +253,21 @@ const EVMChainView = (props: {
           activeAddressesUnit={props.activeAddressesUnit}
         />
         {/* Active Users Badge */}
-        <div class="chain-monitor-card__users-badge chain-monitor-card__users-badge--evm" style={{ color: chainColor() }}>
+        <div
+          class="chain-monitor-card__users-badge chain-monitor-card__users-badge--evm"
+          style={{ color: chainColor() }}
+        >
           <div
             class="chain-monitor-card__users-icon"
             style={`mask-image: url(${activeAddressIcon}); -webkit-mask-image: url(${activeAddressIcon}); mask-size: contain; -webkit-mask-size: contain; mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center; background-color: ${chainColor() || '#FFFFFF'};`}
             role="img"
             aria-label="Active Addresses"
           />
-          <Show when={props.data.activeAddresses !== null && props.data.activeAddresses !== undefined} fallback={
-            <span class="chain-monitor-card__users-text">--</span>
-          }>
-            <span class="chain-monitor-card__users-text">
-              {props.data.activeAddresses}
-            </span>
+          <Show
+            when={props.data.activeAddresses !== null && props.data.activeAddresses !== undefined}
+            fallback={<span class="chain-monitor-card__users-text">--</span>}
+          >
+            <span class="chain-monitor-card__users-text">{props.data.activeAddresses}</span>
           </Show>
         </div>
       </header>
@@ -269,75 +275,79 @@ const EVMChainView = (props: {
       {/* Body - Metrics Grid (2x2) */}
       <div class="chain-monitor-card__body">
         <main class="chain-monitor-card__metrics">
-        {/* BLOCK */}
-        <div class="chain-metric chain-metric--block">
-          <div class="chain-metric__header">
-            <span class="chain-metric__label">BLOCK</span>
-            <img src={timeIcon} alt="Block Time" class="chain-metric__icon" />
-          </div>
-          <div class="chain-metric__value-container">
-            <Show when={props.data.blockDelay !== null && props.data.blockDelay !== undefined} fallback={
-              <span class="chain-metric__value">--</span>
-            }>
-              <span class="chain-metric__value">{props.data.blockDelay}</span>
-              <span class="chain-metric__unit">s</span>
-            </Show>
-          </div>
-        </div>
-
-        {/* GAS */}
-        <div class="chain-metric chain-metric--gas">
-          <div class="chain-metric__header">
-            <span class="chain-metric__label">GAS</span>
-            <img src={gasIcon} alt="Gas Price" class="chain-metric__icon" />
-          </div>
-          <div class="chain-metric__value-container">
-            <Show when={props.data.gasPrice !== null && props.data.gasPrice !== undefined} fallback={
-              <span class="chain-metric__value">--</span>
-            }>
-              <span class="chain-metric__value">{props.data.gasPrice}</span>
-            </Show>
-            <Show when={props.data.gasUnit}>
-              <span
-                class="chain-metric__unit"
-                classList={{ 'chain-metric__unit--sol': props.chain === 'sol' }}
-                style={{ color: chainColor() }}
+          {/* BLOCK */}
+          <div class="chain-metric chain-metric--block">
+            <div class="chain-metric__header">
+              <span class="chain-metric__label">BLOCK</span>
+              <img src={timeIcon} alt="Block Time" class="chain-metric__icon" />
+            </div>
+            <div class="chain-metric__value-container">
+              <Show
+                when={props.data.blockDelay !== null && props.data.blockDelay !== undefined}
+                fallback={<span class="chain-metric__value">--</span>}
               >
-                {props.data.gasUnit}
-              </span>
-            </Show>
+                <span class="chain-metric__value">{props.data.blockDelay}</span>
+                <span class="chain-metric__unit">s</span>
+              </Show>
+            </div>
           </div>
-        </div>
 
-        {/* TPS */}
-        <div class="chain-metric chain-metric--tps">
-          <div class="chain-metric__header">
-            <span class="chain-metric__label">TPS</span>
-            <img src={tpsIcon} alt="TPS" class="chain-metric__icon" />
+          {/* GAS */}
+          <div class="chain-metric chain-metric--gas">
+            <div class="chain-metric__header">
+              <span class="chain-metric__label">GAS</span>
+              <img src={gasIcon} alt="Gas Price" class="chain-metric__icon" />
+            </div>
+            <div class="chain-metric__value-container">
+              <Show
+                when={props.data.gasPrice !== null && props.data.gasPrice !== undefined}
+                fallback={<span class="chain-metric__value">--</span>}
+              >
+                <span class="chain-metric__value">{props.data.gasPrice}</span>
+              </Show>
+              <Show when={props.data.gasUnit}>
+                <span
+                  class="chain-metric__unit"
+                  classList={{ 'chain-metric__unit--sol': props.chain === 'sol' }}
+                  style={{ color: chainColor() }}
+                >
+                  {props.data.gasUnit}
+                </span>
+              </Show>
+            </div>
           </div>
-          <div class="chain-metric__value-container">
-            <Show when={props.data.tps !== null && props.data.tps !== undefined} fallback={
-              <span class="chain-metric__value">--</span>
-            }>
-              <span class="chain-metric__value">{props.data.tps}</span>
-            </Show>
-          </div>
-        </div>
 
-        {/* TVL */}
-        <div class="chain-metric chain-metric--tvl">
-          <div class="chain-metric__header">
-            <span class="chain-metric__label">TVL</span>
-            <img src={tvlIcon} alt="TVL" class="chain-metric__icon" />
+          {/* TPS */}
+          <div class="chain-metric chain-metric--tps">
+            <div class="chain-metric__header">
+              <span class="chain-metric__label">TPS</span>
+              <img src={tpsIcon} alt="TPS" class="chain-metric__icon" />
+            </div>
+            <div class="chain-metric__value-container">
+              <Show
+                when={props.data.tps !== null && props.data.tps !== undefined}
+                fallback={<span class="chain-metric__value">--</span>}
+              >
+                <span class="chain-metric__value">{props.data.tps}</span>
+              </Show>
+            </div>
           </div>
-          <div class="chain-metric__value-container">
-            <Show when={props.data.tvl !== null && props.data.tvl !== undefined} fallback={
-              <span class="chain-metric__value">--</span>
-            }>
-              <span class="chain-metric__value">${props.data.tvl}</span>
-            </Show>
+
+          {/* TVL */}
+          <div class="chain-metric chain-metric--tvl">
+            <div class="chain-metric__header">
+              <span class="chain-metric__label">TVL</span>
+              <img src={tvlIcon} alt="TVL" class="chain-metric__icon" />
+            </div>
+            <div class="chain-metric__value-container">
+              <Show
+                when={props.data.tvl !== null && props.data.tvl !== undefined}
+                fallback={<span class="chain-metric__value">--</span>}
+              >
+                <span class="chain-metric__value">${props.data.tvl}</span>
+              </Show>
+            </div>
           </div>
-        </div>
         </main>
 
         {/* Progress Bar - 底部装饰线 */}
@@ -392,20 +402,22 @@ const BTCChainView = (props: {
             />
           </div>
           <span class="chain-monitor-card__btc-name">Bitcoin</span>
-          <span class="chain-monitor-card__chevron">
-            {props.isSelectorOpen ? '▲' : '▼'}
-          </span>
+          <span class="chain-monitor-card__chevron">{props.isSelectorOpen ? '▲' : '▼'}</span>
         </button>
-        <div class="chain-monitor-card__users-badge chain-monitor-card__users-badge--btc" style={{ color: chainColor() }}>
-          <div 
+        <div
+          class="chain-monitor-card__users-badge chain-monitor-card__users-badge--btc"
+          style={{ color: chainColor() }}
+        >
+          <div
             class="chain-monitor-card__users-icon"
             style={`mask-image: url(${activeAddressIcon}); -webkit-mask-image: url(${activeAddressIcon}); mask-size: contain; -webkit-mask-size: contain; mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center; background-color: ${chainColor() || '#FFFFFF'};`}
             role="img"
             aria-label="Active Addresses"
           />
-          <Show when={props.data.activeAddresses !== null && props.data.activeAddresses !== undefined} fallback={
-            <span class="chain-monitor-card__users-text">--</span>
-          }>
+          <Show
+            when={props.data.activeAddresses !== null && props.data.activeAddresses !== undefined}
+            fallback={<span class="chain-monitor-card__users-text">--</span>}
+          >
             <span class="chain-monitor-card__users-text">{props.data.activeAddresses}</span>
           </Show>
         </div>
@@ -433,11 +445,14 @@ const BTCChainView = (props: {
               <img src={gasIcon} alt="Fees" class="chain-monitor-card__fees-icon" />
             </div>
             <div class="chain-monitor-card__fees-value-container">
-              <Show when={props.data.fees !== null && props.data.fees !== undefined} fallback={
-                <span class="chain-monitor-card__fees-value">--</span>
-              }>
+              <Show
+                when={props.data.fees !== null && props.data.fees !== undefined}
+                fallback={<span class="chain-monitor-card__fees-value">--</span>}
+              >
                 <span class="chain-monitor-card__fees-value">{props.data.fees}</span>
-                <span class="chain-monitor-card__fees-unit" style={{ color: chainColor() }}>{props.data.feesUnit}</span>
+                <span class="chain-monitor-card__fees-unit" style={{ color: chainColor() }}>
+                  {props.data.feesUnit}
+                </span>
               </Show>
             </div>
           </div>
@@ -450,9 +465,10 @@ const BTCChainView = (props: {
               <img src={timeIcon} alt="Block Time" class="chain-monitor-card__bottom-icon" />
             </div>
             <div class="chain-monitor-card__bottom-value-container">
-              <Show when={props.data.blockDelay !== null && props.data.blockDelay !== undefined} fallback={
-                <span class="chain-monitor-card__bottom-value">--</span>
-              }>
+              <Show
+                when={props.data.blockDelay !== null && props.data.blockDelay !== undefined}
+                fallback={<span class="chain-monitor-card__bottom-value">--</span>}
+              >
                 <span class="chain-monitor-card__bottom-value">{props.data.blockDelay}</span>
                 <span class="chain-monitor-card__bottom-unit">{props.data.blockDelayUnit}</span>
               </Show>
@@ -466,9 +482,10 @@ const BTCChainView = (props: {
               <img src={tpsIcon} alt="TPS" class="chain-monitor-card__bottom-icon" />
             </div>
             <div class="chain-monitor-card__bottom-value-container">
-              <Show when={props.data.tps !== null && props.data.tps !== undefined} fallback={
-                <span class="chain-monitor-card__bottom-value">--</span>
-              }>
+              <Show
+                when={props.data.tps !== null && props.data.tps !== undefined}
+                fallback={<span class="chain-monitor-card__bottom-value">--</span>}
+              >
                 <span class="chain-monitor-card__bottom-value">{props.data.tps}</span>
               </Show>
             </div>
@@ -528,28 +545,34 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
       selectedChain: normalizeChainId(settings?.selectedChain),
     };
   };
-  
+
   const initialSettings = getSettings();
-  
-  const [selectedChain, setSelectedChain] = createSignal<ChainId>(initialSettings.selectedChain as ChainId);
+
+  const [selectedChain, setSelectedChain] = createSignal<ChainId>(
+    initialSettings.selectedChain as ChainId,
+  );
   const [isSelectorOpen, setIsSelectorOpen] = createSignal(false);
-  const [chainColors, setChainColors] = createSignal<Record<ChainId, string>>({} as Record<ChainId, string>);
+  const [chainColors, setChainColors] = createSignal<Record<ChainId, string>>(
+    {} as Record<ChainId, string>,
+  );
   const [metrics, setMetrics] = createSignal<ChainMetrics | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
-  
+  const [loadError, setLoadError] = createSignal<string | null>(null);
+  let unsubscribe: (() => void) | undefined;
+
   // 右键菜单
   const { ContextMenuComponent, showContextMenu } = useContextMenu();
 
   // 保存设置到实例 state
   const saveSettings = (newSettings: Partial<ChainMonitorSettings>) => {
     if (!props.onStateChange) return;
-    
+
     const currentSettings = getSettings();
     const updatedSettings: ChainMonitorSettings = {
       ...currentSettings,
       ...newSettings,
     };
-    
+
     props.onStateChange({
       ...props.state,
       settings: updatedSettings,
@@ -559,9 +582,9 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
   // 提取所有链的颜色和加载数据
   onMount(() => {
     const colors: Record<ChainId, string> = {} as Record<ChainId, string>;
-    let unsubscribe: (() => void) | undefined;
 
-    const rawSelectedChain = (props.state?.settings as ChainMonitorSettings | undefined)?.selectedChain;
+    const rawSelectedChain = (props.state?.settings as ChainMonitorSettings | undefined)
+      ?.selectedChain;
     if (rawSelectedChain && normalizeChainId(rawSelectedChain) !== rawSelectedChain) {
       saveSettings({ selectedChain: normalizeChainId(rawSelectedChain) });
     }
@@ -571,47 +594,6 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
       colors[chain.id as ChainId] = getChainColor(chain.id as ChainId);
     }
     setChainColors({ ...colors });
-
-    // 预加载所有5个链的数据
-    const allChains: ChainId[] = ['btc', 'eth', 'sol', 'bsc', 'polygon'];
-    console.log('[ChainMonitor] Preloading data for all chains:', allChains);
-    Promise.all(
-      allChains.map(chain =>
-        chainMonitorService.getAllMetrics(chain).catch(err => {
-          console.error(`[ChainMonitor] Failed to preload ${chain}:`, err);
-          return null;
-        })
-      )
-    ).then(() => {
-      console.log('[ChainMonitor] Preloading completed');
-    });
-
-    // 订阅当前选中链的数据更新
-    unsubscribe = chainMonitorService.subscribe(selectedChain(), (data) => {
-      setMetrics(data);
-      setIsLoading(false);
-    });
-
-    // 初始加载当前选中链的数据
-    loadMetrics(selectedChain());
-
-    // 监听链切换，更新订阅
-    createEffect(() => {
-      const chain = selectedChain();
-      // 取消旧订阅
-      unsubscribe?.();
-      // 订阅新链（使用闭包捕获的chain变量，确保回调只处理该链的数据）
-      unsubscribe = chainMonitorService.subscribe(chain, (data) => {
-        // 确保数据是订阅时链的数据（使用闭包捕获的chain，而不是selectedChain()）
-        // 这样可以避免在链快速切换时使用错误的数据
-        if (data.chain === chain) {
-          setMetrics(data);
-          setIsLoading(false);
-        }
-      });
-      // 加载新链数据（会检查新鲜度，只有过期才获取）
-      loadMetrics(chain);
-    });
 
     // 然后异步提取真实颜色，逐个更新（不阻塞cleanup注册）
     (async () => {
@@ -632,18 +614,13 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
 
       await Promise.all(colorPromises);
     })();
-
-    // onCleanup 必须在同步部分调用
-    onCleanup(() => {
-      unsubscribe?.();
-    });
   });
 
   /**
    * 加载数据（简化版）
    * 服务层已处理自动刷新和旧数据保留
    */
-  const loadMetrics = async (chain: ChainId) => {
+  const loadMetrics = async (chain: ChainId, useCache = true) => {
     // 先检查缓存，立即显示（如果有）
     const cachedData = chainMonitorService.getCachedMetrics(chain);
     if (cachedData) {
@@ -651,14 +628,48 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
       setIsLoading(false);
     }
 
-    // 获取最新数据（服务会检查新鲜度，只有过期才获取）
-    // 如果数据新鲜，不会触发网络请求
-    const data = await chainMonitorService.getAllMetrics(chain, true);
-    if (data) {
+    setLoadError(null);
+    try {
+      const data = await chainMonitorService.getAllMetrics(chain, useCache);
       setMetrics(data);
       setIsLoading(false);
+      const hasAnyData =
+        !!data.blockTimeDelay ||
+        !!data.gasPrice ||
+        !!data.tps ||
+        !!data.activeAddresses ||
+        !!data.tvl;
+      if (!hasAnyData) {
+        setLoadError('数据源重试中');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      setLoadError(error instanceof Error ? error.message : '数据源重试中');
     }
   };
+
+  createEffect(() => {
+    const chain = selectedChain();
+    unsubscribe?.();
+    const cached = chainMonitorService.getCachedMetrics(chain);
+    setMetrics(cached);
+    setIsLoading(!cached);
+    setLoadError(null);
+    unsubscribe = chainMonitorService.subscribe(chain, (data) => {
+      if (data.chain === chain) {
+        setMetrics(data);
+        setIsLoading(false);
+        if (data.blockTimeDelay || data.gasPrice || data.tps || data.activeAddresses || data.tvl) {
+          setLoadError(null);
+        }
+      }
+    });
+    loadMetrics(chain);
+  });
+
+  onCleanup(() => {
+    unsubscribe?.();
+  });
 
   const handleChainSelect = (chain: ChainId) => {
     setSelectedChain(chain);
@@ -686,22 +697,8 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
       {
         label: '加载数据',
         action: () => {
-          // 加载所有5个预定义链的数据
-          const allChains: ChainId[] = ['btc', 'eth', 'sol', 'bsc', 'polygon'];
-          console.log('[ChainMonitor] Manual refresh: Loading data for all chains:', allChains);
-          
-          // 并发加载所有链的数据（不使用缓存，强制刷新）
-          Promise.all(
-            allChains.map(chain => 
-              chainMonitorService.getAllMetrics(chain, false).catch(err => {
-                console.error(`[ChainMonitor] Failed to refresh ${chain}:`, err);
-                return null;
-              })
-            )
-          ).then(() => {
-            console.log('[ChainMonitor] Manual refresh completed');
-            // 数据更新后，订阅机制会自动更新UI
-          });
+          setIsLoading(true);
+          loadMetrics(selectedChain(), false);
         },
       },
     ];
@@ -737,7 +734,6 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
     }
     // 如果数据为 null，返回默认结构
     // 默认结构根据当前选中的链来决定单位
-    const currentIsBTC = isBTC();
     const currentIsSOL = isSOL();
     return {
       chain: selectedChain(),
@@ -758,8 +754,13 @@ export const ChainMonitorWidget = (props: ChainMonitorWidgetProps) => {
     <div class="chain-monitor-widget" onContextMenu={handleContextMenu}>
       <Show when={isLoading() && !metrics()}>
         <div class="chain-monitor-loading">
-          <div class="spinner"></div>
+          <div class="spinner" />
           <span class="chain-monitor-loading-text">连接中...</span>
+        </div>
+      </Show>
+      <Show when={loadError()}>
+        <div class="chain-monitor-status" title={loadError() || ''}>
+          数据源重试中
         </div>
       </Show>
       <Show when={!isLoading() || metrics()}>

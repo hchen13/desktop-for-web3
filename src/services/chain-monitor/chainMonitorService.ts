@@ -18,8 +18,15 @@ import type {
   TVL,
   DataResult,
   DataSource,
+  ChainMetricKey,
 } from './types';
-import { getBlockTimeDelayRPC, getGasPriceRPC, getTPSRPC } from './rpcClient';
+import { DEFAULT_CACHE_CONFIG } from './types';
+import {
+  getActiveAddressesRPC,
+  getBlockTimeDelayRPC,
+  getGasPriceRPC,
+  getTPSRPC,
+} from './rpcClient';
 import { getTVLDefiLlama } from './defillamaClient';
 import { workerAPI } from './apiClient';
 
@@ -42,8 +49,8 @@ const REFRESH_INTERVAL = 10 * 60 * 1000;
 const DEFAULT_DATA_SOURCES: Record<MetricType, DataSource> = {
   blockTimeDelay: 'rpc',
   gasPrice: 'rpc',
-  tps: 'worker.dune',
-  activeAddresses: 'worker.dune',
+  tps: 'rpc',
+  activeAddresses: 'rpc',
   tvl: 'defillama',
 } as const;
 
@@ -60,7 +67,7 @@ function getDefaultSource(metricType: MetricType, chain: ChainId): DataSource {
 /**
  * 指标类型
  */
-type MetricType = 'blockTimeDelay' | 'gasPrice' | 'tps' | 'activeAddresses' | 'tvl';
+type MetricType = ChainMetricKey;
 
 /**
  * 从 localStorage 读取缓存
@@ -119,28 +126,32 @@ class ChainMonitorService {
   private cache = new Map<ChainId, ChainMetrics>();
   private refreshTimers = new Map<string, number>(); // key: `${chain}_${metric}`
   private subscribers = new Map<ChainId, Set<(data: ChainMetrics) => void>>();
-  private globalAutoRefreshStarted = false;
-  private readonly allChains: ChainId[] = ['btc', 'eth', 'sol', 'bsc', 'polygon'];
-  private workerLastRequest = new Map<string, number>(); // key: `${chain}_${metric}`
-  private readonly workerMinInterval = 10 * 60 * 1000; // 10 minutes
+  private startupTimers = new Map<string, number>();
 
   /**
    * 迁移旧数据，确保所有指标都有 source 字段
    */
   private migrateMetrics(chain: ChainId, metrics: ChainMetrics): ChainMetrics {
-    const migrated = { ...metrics };
-    const metricsList: (keyof ChainMetrics)[] = [
+    const metricsList: MetricType[] = [
       'blockTimeDelay',
       'gasPrice',
       'tps',
       'activeAddresses',
       'tvl',
     ];
+    const migrated: ChainMetrics = {
+      ...metrics,
+      metricUpdatedAt: { ...(metrics.metricUpdatedAt || {}) },
+      metricErrors: { ...(metrics.metricErrors || {}) },
+    };
 
     for (const metric of metricsList) {
       const value = migrated[metric];
       if (value && typeof value === 'object' && 'source' in value && !value.source) {
-        (value as any).source = getDefaultSource(metric as MetricType, chain);
+        (value as any).source = getDefaultSource(metric, chain);
+      }
+      if (value && !migrated.metricUpdatedAt?.[metric]) {
+        migrated.metricUpdatedAt![metric] = metrics.lastUpdate;
       }
     }
 
@@ -168,8 +179,6 @@ class ChainMonitorService {
   constructor() {
     // 初始化时从 localStorage 恢复缓存
     this.restoreCacheFromStorage();
-    // 启动全链路轮询（与 UI 状态解耦）
-    this.startAllAutoRefresh();
   }
 
   /**
@@ -188,6 +197,8 @@ class ChainMonitorService {
       activeAddresses: null,
       tvl: null,
       lastUpdate: Date.now(),
+      metricUpdatedAt: {},
+      metricErrors: {},
     };
   }
 
@@ -196,12 +207,17 @@ class ChainMonitorService {
    */
   private updateMetric(chain: ChainId, metricType: MetricType, data: any): void {
     const existing = this.getOrCreateMetrics(chain);
+    const now = Date.now();
 
     if (!data) {
       const updated: ChainMetrics = {
         ...existing,
         [metricType]: null,
-        lastUpdate: Date.now(),
+        lastUpdate: now,
+        metricUpdatedAt: {
+          ...(existing.metricUpdatedAt || {}),
+          [metricType]: now,
+        },
       };
       this.cache.set(chain, updated);
       setCacheToStorage(chain, updated);
@@ -213,10 +229,34 @@ class ChainMonitorService {
       data.source = getDefaultSource(metricType, chain);
     }
 
+    const metricErrors = { ...(existing.metricErrors || {}) };
+    delete metricErrors[metricType];
+
     const updated: ChainMetrics = {
       ...existing,
       [metricType]: data,
+      lastUpdate: now,
+      metricUpdatedAt: {
+        ...(existing.metricUpdatedAt || {}),
+        [metricType]: now,
+      },
+      metricErrors,
+    };
+    this.cache.set(chain, updated);
+    setCacheToStorage(chain, updated);
+    this.notifySubscribers(chain, updated);
+  }
+
+  private recordMetricError(chain: ChainId, metricType: MetricType, error: unknown): void {
+    const existing = this.getOrCreateMetrics(chain);
+    const message = error instanceof Error ? error.message : 'Data source unavailable';
+    const updated: ChainMetrics = {
+      ...existing,
       lastUpdate: Date.now(),
+      metricErrors: {
+        ...(existing.metricErrors || {}),
+        [metricType]: message,
+      },
     };
     this.cache.set(chain, updated);
     setCacheToStorage(chain, updated);
@@ -247,9 +287,12 @@ class ChainMonitorService {
       if (result.data) {
         this.updateMetric(chain, metricType, result.data);
         console.log(`[ChainMonitor] ${chain} ${metricType} updated`);
+      } else {
+        this.recordMetricError(chain, metricType, result.error || new Error('No data returned'));
       }
     } catch (error) {
       console.debug(`[ChainMonitor] ${chain} ${metricType} fetch failed, keeping old data`);
+      this.recordMetricError(chain, metricType, error);
     }
   }
 
@@ -267,18 +310,6 @@ class ChainMonitorService {
     },
   ): Promise<DataResult<T>> {
     const { primaryFn, fallbackFn, primaryDefaultSource, fallbackDefaultSource } = options;
-
-    const shouldUseWorker = (metric: string, source?: DataSource) => {
-      if (!source || !source.startsWith('worker.')) return true;
-      const key = `${chain}_${metric}`;
-      const last = this.workerLastRequest.get(key) || 0;
-      const now = Date.now();
-      if (now - last < this.workerMinInterval) {
-        return false;
-      }
-      this.workerLastRequest.set(key, now);
-      return true;
-    };
 
     const retryRpc = async (fn: () => Promise<T | null>, attempts = 3): Promise<T | null> => {
       let lastError: unknown;
@@ -307,13 +338,13 @@ class ChainMonitorService {
           }
           return { data, source: (data.source || primaryDefaultSource) ?? null };
         }
-      } catch (error) {
+      } catch {
         console.log(`[ChainMonitor] Primary failed for ${chain} ${metricName}, trying fallback`);
       }
     }
 
     // 优先级2: 备用数据源（Worker API）
-    if (fallbackFn && shouldUseWorker(metricName, fallbackDefaultSource)) {
+    if (fallbackFn) {
       try {
         const response = await fallbackFn();
         if (response?.data) {
@@ -325,7 +356,7 @@ class ChainMonitorService {
             source: (response.data.source || fallbackDefaultSource) as DataSource,
           };
         }
-      } catch (error) {
+      } catch {
         console.log(`[ChainMonitor] Fallback failed for ${chain} ${metricName}`);
       }
     }
@@ -353,7 +384,7 @@ class ChainMonitorService {
 
   private async getTPSWithPriority(chain: ChainId): Promise<DataResult<TPS>> {
     return this.executeWithPriority(chain, 'TPS', {
-      primaryFn: chain === 'sol' ? () => getTPSRPC(chain) : undefined,
+      primaryFn: () => getTPSRPC(chain),
       fallbackFn: () => workerAPI.blockchainMonitor.getTPS(chain),
       primaryDefaultSource: 'rpc',
       fallbackDefaultSource: chain === 'sol' ? 'worker.rpc' : 'worker.dune',
@@ -364,7 +395,9 @@ class ChainMonitorService {
     chain: ChainId,
   ): Promise<DataResult<ActiveAddresses>> {
     return this.executeWithPriority(chain, 'activeAddresses', {
+      primaryFn: () => getActiveAddressesRPC(chain),
       fallbackFn: () => workerAPI.blockchainMonitor.getActiveAddresses(chain),
+      primaryDefaultSource: 'rpc',
       fallbackDefaultSource: 'worker.dune',
     });
   }
@@ -410,6 +443,11 @@ class ChainMonitorService {
    */
   private stopMetricRefresh(chain: ChainId, metricType: MetricType): void {
     const timerKey = `${chain}_${metricType}`;
+    const startupTimerId = this.startupTimers.get(timerKey);
+    if (startupTimerId) {
+      clearTimeout(startupTimerId);
+      this.startupTimers.delete(timerKey);
+    }
     const intervalId = this.refreshTimers.get(timerKey);
     if (intervalId) {
       clearInterval(intervalId);
@@ -427,30 +465,20 @@ class ChainMonitorService {
     }
   }
 
-  /**
-   * 检查数据是否新鲜（10分钟保质期）
-   */
-  private isDataFresh(metrics: ChainMetrics): boolean {
+  private isMetricFresh(metrics: ChainMetrics, metricType: MetricType): boolean {
+    if (!metrics[metricType]) {
+      return false;
+    }
+    const updatedAt = metrics.metricUpdatedAt?.[metricType] || 0;
     const now = Date.now();
-    const age = now - metrics.lastUpdate;
-    return age < REFRESH_INTERVAL;
+    const ttl = DEFAULT_CACHE_CONFIG[metricType] || REFRESH_INTERVAL;
+    return now - updatedAt < ttl;
   }
 
   /**
-   * 获取链的所有指标（兼容旧接口）
+   * 检查所有指标是否新鲜
    */
-  async getAllMetrics(chain: ChainId, useCache: boolean = true): Promise<ChainMetrics | null> {
-    // 检查缓存
-    const cached = this.cache.get(chain);
-    if (cached && useCache) {
-      // 如果数据新鲜，直接返回，不触发网络请求
-      if (this.isDataFresh(cached)) {
-        return cached;
-      }
-      // 数据过期，继续获取新数据
-    }
-
-    // 如果没有缓存或数据过期，并发获取所有指标
+  private isDataFresh(metrics: ChainMetrics): boolean {
     const metricTypes: MetricType[] = [
       'blockTimeDelay',
       'gasPrice',
@@ -458,9 +486,36 @@ class ChainMonitorService {
       'activeAddresses',
       'tvl',
     ];
-    await Promise.all(metricTypes.map((metric) => this.fetchMetric(chain, metric)));
+    return metricTypes.every((metric) => this.isMetricFresh(metrics, metric));
+  }
 
-    return this.cache.get(chain) || null;
+  /**
+   * 获取链的所有指标（兼容旧接口）
+   */
+  async getAllMetrics(chain: ChainId, useCache: boolean = true): Promise<ChainMetrics> {
+    const metricTypes: MetricType[] = [
+      'blockTimeDelay',
+      'gasPrice',
+      'tps',
+      'activeAddresses',
+      'tvl',
+    ];
+
+    const cached = this.cache.get(chain);
+    if (cached && useCache) {
+      if (this.isDataFresh(cached)) {
+        return cached;
+      }
+    }
+
+    const metricsToFetch =
+      cached && useCache
+        ? metricTypes.filter((metric) => !this.isMetricFresh(cached, metric))
+        : metricTypes;
+
+    await Promise.all(metricsToFetch.map((metric) => this.fetchMetric(chain, metric)));
+
+    return this.cache.get(chain) || this.getOrCreateMetrics(chain);
   }
 
   /**
@@ -510,7 +565,7 @@ class ChainMonitorService {
   /**
    * 启动自动刷新（指定链的所有指标）
    */
-  startAutoRefresh(chain: ChainId, interval?: number): void {
+  startAutoRefresh(chain: ChainId, _interval?: number): void {
     // 清除已有间隔
     this.stopChainRefresh(chain);
 
@@ -519,29 +574,15 @@ class ChainMonitorService {
     // 为每个指标启动独立的定时器
     // 错开启动时间，避免同时请求
     metrics.forEach((metric, index) => {
-      setTimeout(() => {
+      const timerKey = `${chain}_${metric}`;
+      const timeoutId = window.setTimeout(() => {
+        this.startupTimers.delete(timerKey);
         this.startMetricRefresh(chain, metric);
       }, index * 1000); // 每个指标间隔 1 秒启动
+      this.startupTimers.set(timerKey, timeoutId);
     });
 
     console.log(`[ChainMonitor] Auto refresh started for ${chain}`);
-  }
-
-  /**
-   * 启动所有链的自动刷新（全局一次性）
-   */
-  private startAllAutoRefresh(): void {
-    if (this.globalAutoRefreshStarted) return;
-    this.globalAutoRefreshStarted = true;
-
-    // 错开每条链启动，避免瞬时打满请求
-    this.allChains.forEach((chain, chainIndex) => {
-      setTimeout(() => {
-        this.startAutoRefresh(chain);
-      }, chainIndex * 1500);
-    });
-
-    console.log('[ChainMonitor] Global auto refresh started for all chains');
   }
 
   /**
@@ -556,11 +597,12 @@ class ChainMonitorService {
    * 清理所有资源
    */
   cleanup(): void {
+    this.startupTimers.forEach((timeoutId) => clearTimeout(timeoutId));
+    this.startupTimers.clear();
     this.refreshTimers.forEach((intervalId) => clearInterval(intervalId));
     this.refreshTimers.clear();
     this.subscribers.clear();
     this.cache.clear();
-    this.globalAutoRefreshStarted = false;
   }
 }
 

@@ -1,65 +1,133 @@
-/**
- * 纯前端 RPC 客户端
- * 直接调用公共 RPC 端点，不需要 API KEY
- */
+import type { ActiveAddresses, BlockTimeDelay, ChainId, GasPrice, TPS } from './types';
 
-import type { BlockTimeDelay, GasPrice, TPS } from './types';
+const REQUEST_TIMEOUT_MS = 8000;
+const EVM_SAMPLE_BLOCKS = 6;
+const SOL_SAMPLE_BLOCK_LOOKBACK = 24;
 
-/**
- * RPC 端点配置（公共端点，不需要 API KEY）
- * 注意：前端只使用公共端点，不使用带 API KEY 的端点
- */
-const RPC_ENDPOINTS: Record<string, string> = {
-  // Cloudflare Ethereum Gateway 支持 CORS
-  eth: 'https://cloudflare-eth.com',
-  bsc: 'https://bsc-dataseed.binance.org/',
-  polygon: 'https://polygon-rpc.com',
-  btc: 'https://blockstream.info/api',
-  // Solana: 使用公共 RPC 端点（不使用 Alchemy 带 API KEY 的端点）
-  // 使用 PublicNode 的公共端点（稳定可靠）
-  // 如果失败，会回退到 Worker API（Worker 使用 Alchemy 带 API KEY 的端点）
-  sol: 'https://solana-rpc.publicnode.com',
+const EVM_RPC_ENDPOINTS: Record<Exclude<ChainId, 'btc' | 'sol'>, string[]> = {
+  eth: ['https://ethereum-rpc.publicnode.com', 'https://eth.llamarpc.com'],
+  bsc: ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.binance.org/'],
+  polygon: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon-rpc.com'],
 };
 
-/**
- * JSON-RPC 请求
- */
-async function jsonRPC(endpoint: string, method: string, params: any[] = []): Promise<any> {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method,
-      params,
-    }),
-  });
+const SOL_RPC_ENDPOINTS = ['https://solana-rpc.publicnode.com'];
+const BTC_REST_ENDPOINTS = ['https://blockstream.info/api'];
 
-  if (!response.ok) {
-    throw new Error(`RPC request failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (data.error) {
-    throw new Error(`RPC error: ${data.error.message || JSON.stringify(data.error)}`);
-  }
-
-  return data.result;
+interface EVMTransaction {
+  from?: string;
+  to?: string | null;
 }
 
-/**
- * 获取 EVM 链最新区块
- */
-async function getEVMBlock(chain: string): Promise<BlockTimeDelay> {
-  const endpoint = RPC_ENDPOINTS[chain];
-  if (!endpoint) {
-    throw new Error(`Unsupported chain: ${chain}`);
-  }
+interface EVMBlock {
+  number: string;
+  timestamp: string;
+  transactions?: EVMTransaction[];
+}
 
-  const block = await jsonRPC(endpoint, 'eth_getBlockByNumber', ['latest', false]);
+interface BTCBlock {
+  id?: string;
+  height: number;
+  timestamp: number;
+  tx_count?: number;
+}
+
+interface BTCTx {
+  vin?: Array<{ prevout?: { scriptpubkey_address?: string } }>;
+  vout?: Array<{ scriptpubkey_address?: string }>;
+}
+
+type SolanaAccountKey = string | { pubkey?: string };
+
+interface SolanaTransaction {
+  transaction?: {
+    message?: {
+      accountKeys?: SolanaAccountKey[];
+    };
+  };
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetchWithTimeout(url, init);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function fetchText(url: string): Promise<string> {
+  const response = await fetchWithTimeout(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
+async function withCandidates<T>(
+  candidates: string[],
+  run: (endpoint: string) => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+  for (const endpoint of candidates) {
+    try {
+      return await run(endpoint);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('All endpoints failed');
+}
+
+async function jsonRPC<T>(endpoints: string[], method: string, params: unknown[] = []): Promise<T> {
+  return withCandidates(endpoints, async (endpoint) => {
+    const response = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`RPC request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(`RPC error: ${data.error.message || JSON.stringify(data.error)}`);
+    }
+
+    return data.result as T;
+  });
+}
+
+function getEVMEndpoints(chain: ChainId): string[] {
+  if (chain === 'btc' || chain === 'sol') {
+    throw new Error(`Unsupported EVM chain: ${chain}`);
+  }
+  return EVM_RPC_ENDPOINTS[chain];
+}
+
+async function getEVMBlock(chain: Exclude<ChainId, 'btc' | 'sol'>): Promise<BlockTimeDelay> {
+  const block = await jsonRPC<EVMBlock>(getEVMEndpoints(chain), 'eth_getBlockByNumber', [
+    'latest',
+    false,
+  ]);
   const blockNumber = parseInt(block.number, 16);
   const timestamp = parseInt(block.timestamp, 16);
   const now = Math.floor(Date.now() / 1000);
@@ -67,105 +135,59 @@ async function getEVMBlock(chain: string): Promise<BlockTimeDelay> {
   return {
     blockNumber,
     latestBlockTime: timestamp,
-    delaySeconds: now - timestamp,
+    delaySeconds: Math.max(0, now - timestamp),
     source: 'rpc',
   };
 }
 
-/**
- * 获取 BTC 最新区块
- */
 async function getBTCBlock(): Promise<BlockTimeDelay> {
-  const endpoint = RPC_ENDPOINTS.btc;
-  
-  // Blockstream API: 获取最新区块（返回数组，第一个元素是最新区块）
-  const response = await fetch(`${endpoint}/blocks/tip`);
-  if (!response.ok) {
-    throw new Error(`Blockstream API error: ${response.status}`);
-  }
-
-  const blocks = await response.json();
-  // Blockstream API 返回数组，第一个元素是最新区块
-  const block = Array.isArray(blocks) ? blocks[0] : blocks;
-  const now = Math.floor(Date.now() / 1000);
-  
-  // Blockstream API 返回的 timestamp 可能是 null，需要处理
-  const timestamp = block.timestamp || block.mediantime || now;
-  const delaySeconds = now - timestamp;
-
-  return {
-    blockNumber: block.height || 0,
-    latestBlockTime: timestamp,
-    delaySeconds: delaySeconds >= 0 ? delaySeconds : 0,
-    source: 'rpc',
-  };
-}
-
-/**
- * 获取 SOL 最新区块
- */
-async function getSOLBlock(): Promise<BlockTimeDelay> {
-  const endpoint = RPC_ENDPOINTS.sol;
-
-  try {
-    // 1. 获取最新 slot
-    const slot = await jsonRPC(endpoint, 'getSlot');
-    if (!slot) {
-      throw new Error('Failed to get Solana slot');
-    }
-
-    // 2. 获取区块时间
-    const blockTime = await jsonRPC(endpoint, 'getBlockTime', [slot]);
+  return withCandidates(BTC_REST_ENDPOINTS, async (endpoint) => {
+    const height = Number((await fetchText(`${endpoint}/blocks/tip/height`)).trim());
+    const hash = (await fetchText(`${endpoint}/block-height/${height}`)).trim();
+    const block = await fetchJSON<BTCBlock>(`${endpoint}/block/${hash}`);
     const now = Math.floor(Date.now() / 1000);
 
-    // 如果 getBlockTime 返回 null，使用当前时间
-    const timestamp = blockTime || now;
-
     return {
-      blockNumber: slot,
-      latestBlockTime: timestamp,
-      delaySeconds: now - timestamp,
+      blockNumber: block.height,
+      latestBlockTime: block.timestamp,
+      delaySeconds: Math.max(0, now - block.timestamp),
       source: 'rpc',
     };
-  } catch (error) {
-    // Solana 公共 RPC 有速率限制，如果失败直接抛出错误，让上层回退到 Worker
-    // 降级日志级别，避免控制台过多错误
-    console.debug('[Solana RPC] Failed (expected with rate limiting):', error);
-    throw new Error(`Solana RPC failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  });
 }
 
-/**
- * 获取区块时间延迟（优先级1：纯前端RPC）
- */
+async function getSOLBlock(): Promise<BlockTimeDelay> {
+  const slot = await jsonRPC<number>(SOL_RPC_ENDPOINTS, 'getSlot', [{ commitment: 'confirmed' }]);
+  const blockTime = await jsonRPC<number | null>(SOL_RPC_ENDPOINTS, 'getBlockTime', [slot]);
+  const now = Math.floor(Date.now() / 1000);
+  const timestamp = blockTime || now;
+
+  return {
+    blockNumber: slot,
+    latestBlockTime: timestamp,
+    delaySeconds: Math.max(0, now - timestamp),
+    source: 'rpc',
+  };
+}
+
 export async function getBlockTimeDelayRPC(chain: string): Promise<BlockTimeDelay> {
-  const chainLower = chain.toLowerCase();
+  const chainLower = chain.toLowerCase() as ChainId;
 
-  try {
-    if (['eth', 'bsc', 'polygon'].includes(chainLower)) {
-      return await getEVMBlock(chainLower);
-    } else if (chainLower === 'btc') {
-      return await getBTCBlock();
-    } else if (chainLower === 'sol') {
-      return await getSOLBlock();
-    } else {
-      throw new Error(`Unsupported chain: ${chain}`);
-    }
-  } catch (error) {
-    throw new Error(`RPC call failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  if (chainLower === 'btc') {
+    return getBTCBlock();
   }
+  if (chainLower === 'sol') {
+    return getSOLBlock();
+  }
+  if (chainLower === 'eth' || chainLower === 'bsc' || chainLower === 'polygon') {
+    return getEVMBlock(chainLower);
+  }
+
+  throw new Error(`Unsupported chain: ${chain}`);
 }
 
-/**
- * 获取 EVM Gas 价格
- */
-async function getEVMGasPrice(chain: string): Promise<GasPrice> {
-  const endpoint = RPC_ENDPOINTS[chain];
-  if (!endpoint) {
-    throw new Error(`Unsupported chain: ${chain}`);
-  }
-
-  const gasPriceHex = await jsonRPC(endpoint, 'eth_gasPrice');
+async function getEVMGasPrice(chain: Exclude<ChainId, 'btc' | 'sol'>): Promise<GasPrice> {
+  const gasPriceHex = await jsonRPC<string>(getEVMEndpoints(chain), 'eth_gasPrice');
   const gasPriceWei = parseInt(gasPriceHex, 16);
   const gasPriceGwei = gasPriceWei / 1e9;
 
@@ -179,155 +201,317 @@ async function getEVMGasPrice(chain: string): Promise<GasPrice> {
   };
 }
 
-/**
- * 获取 BTC 费率
- */
 async function getBTCFeeRate(): Promise<GasPrice> {
-  const endpoint = RPC_ENDPOINTS.btc;
+  return withCandidates(BTC_REST_ENDPOINTS, async (endpoint) => {
+    const estimates = await fetchJSON<Record<string, number>>(`${endpoint}/fee-estimates`);
+    const feeRates = Object.values(estimates).filter(Number.isFinite);
+    if (feeRates.length === 0) {
+      throw new Error('No BTC fee estimates returned');
+    }
+    const targetFee = estimates['6'] || estimates['3'] || estimates['1'] || feeRates[0];
 
-  // Blockstream API: 获取费率估算
-  const response = await fetch(`${endpoint}/fee-estimates`);
-  if (!response.ok) {
-    throw new Error(`Blockstream API error: ${response.status}`);
-  }
+    return {
+      avgGasGwei: targetFee,
+      medianGasGwei: targetFee,
+      minGasGwei: Math.min(...feeRates),
+      maxGasGwei: Math.max(...feeRates),
+      unit: 'sat/vB',
+      source: 'rpc',
+    };
+  });
+}
 
-  const estimates = await response.json();
-  const feeRates = Object.values(estimates) as number[];
-  const avgFee = feeRates.reduce((a, b) => a + b, 0) / feeRates.length;
+async function getSOLFeeRate(): Promise<GasPrice> {
+  const baseFeeLamports = 5000;
+  const fees = await jsonRPC<Array<{ prioritizationFee?: number }>>(
+    SOL_RPC_ENDPOINTS,
+    'getRecentPrioritizationFees',
+    [[]],
+  );
+  const priorityFees = fees
+    .map((fee) => fee.prioritizationFee || 0)
+    .filter((fee) => Number.isFinite(fee) && fee >= 0)
+    .sort((a, b) => a - b);
+  const medianPriorityFee = priorityFees[Math.floor(priorityFees.length / 2)] || 0;
+  const maxPriorityFee = priorityFees[priorityFees.length - 1] || 0;
+  const totalFee = baseFeeLamports + medianPriorityFee;
 
   return {
-    avgGasGwei: avgFee,
-    medianGasGwei: avgFee,
-    minGasGwei: Math.min(...feeRates),
-    maxGasGwei: Math.max(...feeRates),
-    unit: 'sat/vB',
+    avgGasGwei: totalFee / 1e9,
+    medianGasGwei: totalFee / 1e9,
+    minGasGwei: baseFeeLamports / 1e9,
+    maxGasGwei: (baseFeeLamports + maxPriorityFee) / 1e9,
+    unit: 'SOL',
     source: 'rpc',
   };
 }
 
-/**
- * 获取 SOL 费率
- */
-async function getSOLFeeRate(): Promise<GasPrice> {
-  const endpoint = RPC_ENDPOINTS.sol;
-
-  try {
-    // 获取最近的优先费用
-    const fees = await jsonRPC(endpoint, 'getRecentPrioritizationFees', []);
-    
-    if (!fees || fees.length === 0) {
-      // 默认值
-      return {
-        avgGasGwei: 0.000005,
-        medianGasGwei: 0.000005,
-        minGasGwei: 0.0000045,
-        maxGasGwei: 0.0000055,
-        unit: 'SOL',
-        source: 'rpc',
-      };
-    }
-
-    const feeValues = fees.map((f: any) => f.prioritizationFee || 0).filter((f: number) => f > 0);
-    if (feeValues.length === 0) {
-      return {
-        avgGasGwei: 0.000005,
-        medianGasGwei: 0.000005,
-        minGasGwei: 0.0000045,
-        maxGasGwei: 0.0000055,
-        unit: 'SOL',
-        source: 'rpc',
-      };
-    }
-
-    const avgFee = feeValues.reduce((a: number, b: number) => a + b, 0) / feeValues.length;
-    const sorted = [...feeValues].sort((a, b) => a - b);
-    const medianFee = sorted[Math.floor(sorted.length / 2)];
-
-    // 转换为 SOL（Lamports to SOL）
-    const lamportsToSol = 1e9;
-    return {
-      avgGasGwei: avgFee / lamportsToSol,
-      medianGasGwei: medianFee / lamportsToSol,
-      minGasGwei: Math.min(...feeValues) / lamportsToSol,
-      maxGasGwei: Math.max(...feeValues) / lamportsToSol,
-      unit: 'SOL',
-      source: 'rpc',
-    };
-  } catch (error) {
-    // Solana 公共 RPC 有速率限制，如果失败直接抛出错误，让上层回退到 Worker
-    // 降级日志级别，避免控制台过多错误
-    console.debug('[Solana RPC] Failed (expected with rate limiting):', error);
-    throw new Error(`Solana RPC failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * 获取 Gas 价格（优先级1：纯前端RPC）
- */
 export async function getGasPriceRPC(chain: string): Promise<GasPrice> {
-  const chainLower = chain.toLowerCase();
+  const chainLower = chain.toLowerCase() as ChainId;
 
-  try {
-    if (['eth', 'bsc', 'polygon'].includes(chainLower)) {
-      return await getEVMGasPrice(chainLower);
-    } else if (chainLower === 'btc') {
-      return await getBTCFeeRate();
-    } else if (chainLower === 'sol') {
-      return await getSOLFeeRate();
-    } else {
-      throw new Error(`Unsupported chain: ${chain}`);
-    }
-  } catch (error) {
-    throw new Error(`RPC call failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  if (chainLower === 'btc') {
+    return getBTCFeeRate();
   }
+  if (chainLower === 'sol') {
+    return getSOLFeeRate();
+  }
+  if (chainLower === 'eth' || chainLower === 'bsc' || chainLower === 'polygon') {
+    return getEVMGasPrice(chainLower);
+  }
+
+  throw new Error(`Unsupported chain: ${chain}`);
 }
 
-/**
- * 获取 SOL TPS（优先级1：纯前端RPC）
- */
-export async function getTPSRPC(chain: string): Promise<TPS> {
-  const chainLower = chain.toLowerCase();
+async function getEVMRecentBlocks(
+  chain: Exclude<ChainId, 'btc' | 'sol'>,
+  count = EVM_SAMPLE_BLOCKS,
+): Promise<EVMBlock[]> {
+  const endpoints = getEVMEndpoints(chain);
+  const latestHex = await jsonRPC<string>(endpoints, 'eth_blockNumber');
+  const latest = parseInt(latestHex, 16);
+  const blocks: EVMBlock[] = [];
 
-  if (chainLower !== 'sol') {
-    throw new Error('RPC TPS only supported for SOL');
+  for (let i = 0; i < count; i += 1) {
+    const blockNumber = `0x${(latest - i).toString(16)}`;
+    const block = await jsonRPC<EVMBlock | null>(endpoints, 'eth_getBlockByNumber', [
+      blockNumber,
+      true,
+    ]);
+    if (block) {
+      blocks.push(block);
+    }
   }
 
-  try {
-    const endpoint = RPC_ENDPOINTS.sol;
+  if (blocks.length === 0) {
+    throw new Error('No EVM sample blocks returned');
+  }
+  return blocks;
+}
 
-    // 获取最近的性能样本
-    const samples = await jsonRPC(endpoint, 'getRecentPerformanceSamples', [60]);
-    
-    if (!samples || samples.length === 0) {
-      throw new Error('No performance samples returned');
+function getBlockPeriodSeconds(timestamps: number[]): number {
+  const sorted = timestamps.filter(Number.isFinite).sort((a, b) => b - a);
+  if (sorted.length < 2) {
+    return 1;
+  }
+  return Math.max(1, sorted[0] - sorted[sorted.length - 1]);
+}
+
+async function getEVMTPS(chain: Exclude<ChainId, 'btc' | 'sol'>): Promise<TPS> {
+  const blocks = await getEVMRecentBlocks(chain);
+  const timestamps = blocks.map((block) => parseInt(block.timestamp, 16));
+  const periodSeconds = getBlockPeriodSeconds(timestamps);
+  const txCount = blocks.reduce((sum, block) => sum + (block.transactions?.length || 0), 0);
+
+  return {
+    tps: txCount / periodSeconds,
+    txCount,
+    sampleCount: blocks.length,
+    periodSeconds,
+    source: 'rpc',
+  };
+}
+
+async function getBTCRecentBlocks(): Promise<BTCBlock[]> {
+  return withCandidates(BTC_REST_ENDPOINTS, async (endpoint) => {
+    const blocks = await fetchJSON<BTCBlock[]>(`${endpoint}/blocks`);
+    if (!Array.isArray(blocks) || blocks.length === 0) {
+      throw new Error('No BTC blocks returned');
     }
+    return blocks;
+  });
+}
 
-    // 计算平均 TPS（非投票交易）
-    // 每个样本的 TPS = numNonVoteTransactions / samplePeriodSecs
-    let totalTPS = 0;
-    let validSamples = 0;
+async function getBTCTPS(): Promise<TPS> {
+  const blocks = await getBTCRecentBlocks();
+  const timestamps = blocks.map((block) => block.timestamp);
+  const periodSeconds = getBlockPeriodSeconds(timestamps);
+  const txCount = blocks.reduce((sum, block) => sum + (block.tx_count || 0), 0);
 
-    for (const sample of samples) {
-      if (sample.numNonVoteTransactions !== undefined && sample.samplePeriodSecs > 0) {
-        const tps = sample.numNonVoteTransactions / sample.samplePeriodSecs;
-        totalTPS += tps;
-        validSamples++;
+  return {
+    tps: txCount / periodSeconds,
+    txCount,
+    sampleCount: blocks.length,
+    periodSeconds,
+    source: 'rpc',
+  };
+}
+
+async function getSOLTPS(): Promise<TPS> {
+  const samples = await jsonRPC<
+    Array<{ numTransactions?: number; numNonVoteTransactions?: number; samplePeriodSecs?: number }>
+  >(SOL_RPC_ENDPOINTS, 'getRecentPerformanceSamples', [10]);
+  if (!samples || samples.length === 0) {
+    throw new Error('No Solana performance samples returned');
+  }
+
+  let txCount = 0;
+  let periodSeconds = 0;
+  for (const sample of samples) {
+    txCount += sample.numNonVoteTransactions ?? sample.numTransactions ?? 0;
+    periodSeconds += sample.samplePeriodSecs || 60;
+  }
+
+  return {
+    tps: txCount / Math.max(1, periodSeconds),
+    txCount,
+    sampleCount: samples.length,
+    periodSeconds,
+    source: 'rpc',
+  };
+}
+
+export async function getTPSRPC(chain: string): Promise<TPS> {
+  const chainLower = chain.toLowerCase() as ChainId;
+
+  if (chainLower === 'btc') {
+    return getBTCTPS();
+  }
+  if (chainLower === 'sol') {
+    return getSOLTPS();
+  }
+  if (chainLower === 'eth' || chainLower === 'bsc' || chainLower === 'polygon') {
+    return getEVMTPS(chainLower);
+  }
+
+  throw new Error(`Unsupported chain: ${chain}`);
+}
+
+async function getEVMActiveAddresses(
+  chain: Exclude<ChainId, 'btc' | 'sol'>,
+): Promise<ActiveAddresses> {
+  const blocks = await getEVMRecentBlocks(chain);
+  const addresses = new Set<string>();
+  const timestamps = blocks.map((block) => parseInt(block.timestamp, 16));
+
+  for (const block of blocks) {
+    for (const tx of block.transactions || []) {
+      if (tx.from) {
+        addresses.add(tx.from.toLowerCase());
+      }
+      if (tx.to) {
+        addresses.add(tx.to.toLowerCase());
+      }
+    }
+  }
+
+  return {
+    activeAddresses: addresses.size,
+    sampleSize: blocks.length,
+    periodSeconds: getBlockPeriodSeconds(timestamps),
+    source: 'rpc',
+  };
+}
+
+async function getBTCActiveAddresses(): Promise<ActiveAddresses> {
+  return withCandidates(BTC_REST_ENDPOINTS, async (endpoint) => {
+    const blocks = await getBTCRecentBlocks();
+    const latestBlock = blocks[0];
+    const hash =
+      latestBlock.id || (await fetchText(`${endpoint}/block-height/${latestBlock.height}`)).trim();
+    const txs = await fetchJSON<BTCTx[]>(`${endpoint}/block/${hash}/txs`);
+    const addresses = new Set<string>();
+
+    for (const tx of txs) {
+      for (const input of tx.vin || []) {
+        const address = input.prevout?.scriptpubkey_address;
+        if (address) {
+          addresses.add(address);
+        }
+      }
+      for (const output of tx.vout || []) {
+        if (output.scriptpubkey_address) {
+          addresses.add(output.scriptpubkey_address);
+        }
       }
     }
 
-    const avgTps = validSamples > 0 ? totalTPS / validSamples : 0;
-
     return {
-      tps: avgTps,
-      txCount: samples.reduce((sum: number, s: any) => sum + (s.numNonVoteTransactions || 0), 0),
-      sampleCount: validSamples,
-      periodSeconds: samples[0]?.samplePeriodSecs || 60,
+      activeAddresses: addresses.size || latestBlock.tx_count || 0,
+      sampleSize: txs.length,
+      periodSeconds: 600,
       source: 'rpc',
     };
-  } catch (error) {
-    // Solana 公共 RPC 有速率限制，如果失败直接抛出错误，让上层回退到 Worker
-    // 降级日志级别，避免控制台过多错误
-    console.debug('[Solana RPC] Failed (expected with rate limiting):', error);
-    throw new Error(`Solana RPC failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  });
+}
+
+function normalizeSolanaAccountKey(accountKey: SolanaAccountKey): string | null {
+  if (typeof accountKey === 'string') {
+    return accountKey;
   }
+  return accountKey.pubkey || null;
+}
+
+async function getSOLActiveAddresses(): Promise<ActiveAddresses> {
+  const latestSlot = await jsonRPC<number>(SOL_RPC_ENDPOINTS, 'getSlot', [
+    { commitment: 'confirmed' },
+  ]);
+  let lastError: unknown;
+
+  for (let offset = 0; offset <= SOL_SAMPLE_BLOCK_LOOKBACK; offset += 1) {
+    try {
+      const slot = latestSlot - offset;
+      const block = await jsonRPC<{ transactions?: SolanaTransaction[] } | null>(
+        SOL_RPC_ENDPOINTS,
+        'getBlock',
+        [
+          slot,
+          {
+            encoding: 'json',
+            transactionDetails: 'full',
+            rewards: false,
+            maxSupportedTransactionVersion: 0,
+          },
+        ],
+      );
+      const addresses = new Set<string>();
+
+      for (const tx of block?.transactions || []) {
+        for (const accountKey of tx.transaction?.message?.accountKeys || []) {
+          const address = normalizeSolanaAccountKey(accountKey);
+          if (address) {
+            addresses.add(address);
+          }
+        }
+      }
+
+      if (addresses.size > 0) {
+        return {
+          activeAddresses: addresses.size,
+          sampleSize: block?.transactions?.length || 0,
+          periodSeconds: 1,
+          source: 'rpc',
+        };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const tps = await getSOLTPS().catch(() => null);
+  if (tps?.txCount) {
+    return {
+      activeAddresses: tps.txCount,
+      sampleSize: tps.sampleCount,
+      periodSeconds: tps.periodSeconds,
+      source: 'rpc',
+    };
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('No Solana activity sample returned');
+}
+
+export async function getActiveAddressesRPC(chain: string): Promise<ActiveAddresses> {
+  const chainLower = chain.toLowerCase() as ChainId;
+
+  if (chainLower === 'btc') {
+    return getBTCActiveAddresses();
+  }
+  if (chainLower === 'sol') {
+    return getSOLActiveAddresses();
+  }
+  if (chainLower === 'eth' || chainLower === 'bsc' || chainLower === 'polygon') {
+    return getEVMActiveAddresses(chainLower);
+  }
+
+  throw new Error(`Unsupported chain: ${chain}`);
 }

@@ -38,15 +38,82 @@ describe('ChainMonitorService — cache/migration', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.doUnmock('./rpcClient');
+    vi.doUnmock('./defillamaClient');
+    vi.doUnmock('./apiClient');
   });
 
   it('persists snapshot via getCachedMetrics after notify', async () => {
     // Mock fetch to no-op
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({}), { status: 200 }),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
     const { chainMonitorService } = await import('./chainMonitorService');
     expect(chainMonitorService.getCachedMetrics('eth')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fetches missing metrics even when another metric is fresh', async () => {
+    const now = Date.now();
+    const rpcMocks = {
+      getBlockTimeDelayRPC: vi.fn(),
+      getGasPriceRPC: vi.fn().mockResolvedValue({
+        avgGasGwei: 10,
+        medianGasGwei: 10,
+        minGasGwei: 9,
+        maxGasGwei: 11,
+        unit: 'gwei',
+        source: 'rpc',
+      }),
+      getTPSRPC: vi.fn().mockResolvedValue({ tps: 12, txCount: 120, source: 'rpc' }),
+      getActiveAddressesRPC: vi.fn().mockResolvedValue({ activeAddresses: 42, source: 'rpc' }),
+    };
+
+    vi.doMock('./rpcClient', () => rpcMocks);
+    vi.doMock('./defillamaClient', () => ({
+      getTVLDefiLlama: vi.fn().mockResolvedValue({ tvl: 1000, tvlUSD: 1000, source: 'defillama' }),
+    }));
+    vi.doMock('./apiClient', () => ({
+      workerAPI: {
+        blockchainMonitor: {
+          getBlockTimeDelay: vi.fn(),
+          getGasPrice: vi.fn(),
+          getTPS: vi.fn(),
+          getActiveAddresses: vi.fn(),
+          getTVL: vi.fn(),
+        },
+      },
+    }));
+
+    localStorage.setItem(
+      'chain_monitor_cache_eth',
+      JSON.stringify({
+        version: 'v2',
+        timestamp: now,
+        data: {
+          ...buildMetrics('eth'),
+          gasPrice: null,
+          tps: null,
+          activeAddresses: null,
+          tvl: null,
+          lastUpdate: now,
+          metricUpdatedAt: { blockTimeDelay: now },
+        },
+      }),
+    );
+    vi.resetModules();
+    const { chainMonitorService } = await import('./chainMonitorService');
+    const metrics = await chainMonitorService.getAllMetrics('eth', true);
+
+    expect(rpcMocks.getBlockTimeDelayRPC).not.toHaveBeenCalled();
+    expect(rpcMocks.getGasPriceRPC).toHaveBeenCalled();
+    expect(rpcMocks.getTPSRPC).toHaveBeenCalled();
+    expect(rpcMocks.getActiveAddressesRPC).toHaveBeenCalled();
+    expect(metrics.blockTimeDelay).not.toBeNull();
+    expect(metrics.gasPrice).not.toBeNull();
+    expect(metrics.tps).not.toBeNull();
+    expect(metrics.activeAddresses).not.toBeNull();
+    expect(metrics.tvl).not.toBeNull();
   });
 
   it('subscribe immediately notifies new subscriber if cache exists', async () => {

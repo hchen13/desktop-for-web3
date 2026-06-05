@@ -21,9 +21,8 @@ function getSolanaRPCEndpoint(): string {
   } catch (error) {
     // Alchemy key 不存在，使用默认端点
   }
-  
-  // 如果没有 Alchemy key，使用硬编码的 Alchemy 端点（用户提供的）
-  return 'https://solana-mainnet.g.alchemy.com/v2/edfV6Ht9xy452w6VzwlpP4OFwlccCJYT';
+
+  return 'https://solana-rpc.publicnode.com';
 }
 
 /**
@@ -45,18 +44,21 @@ function getRPCEndpoint(chain: string): string {
   const endpoints: Record<string, string> = {
     eth: alchemyKey
       ? `https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://eth.llamarpc.com',
-    bsc: 'https://bsc-dataseed.binance.org/',
+      : 'https://ethereum-rpc.publicnode.com',
+    bsc: 'https://bsc-rpc.publicnode.com',
     polygon: alchemyKey
       ? `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`
-      : 'https://polygon-rpc.com',
+      : 'https://polygon-bor-rpc.publicnode.com',
     btc: 'https://blockstream.info/api/',
     // Solana: 使用 Alchemy 端点（优先使用配置的 API key，否则使用硬编码的 key）
     sol: getSolanaRPCEndpoint(),
   };
 
   const endpoint = endpoints[chainLower] || endpoints.eth;
-  console.log('[RPC] Selected endpoint:', { chain: chainLower, endpoint: endpoint.replace(/\/v2\/[^/]+/, '/v2/***') });
+  console.log('[RPC] Selected endpoint:', {
+    chain: chainLower,
+    endpoint: endpoint.replace(/\/v2\/[^/]+/, '/v2/***'),
+  });
 
   return endpoint;
 }
@@ -66,9 +68,12 @@ function getRPCEndpoint(chain: string): string {
  */
 async function getEVMBlock(chain: string): Promise<any> {
   const endpoint = getRPCEndpoint(chain);
-  
-  console.log('[RPC] getEVMBlock:', { chain, endpoint: endpoint.replace(/\/v2\/[^/]+/, '/v2/***') });
-  
+
+  console.log('[RPC] getEVMBlock:', {
+    chain,
+    endpoint: endpoint.replace(/\/v2\/[^/]+/, '/v2/***'),
+  });
+
   // 直接获取最新区块详情（包含区块号和时间戳）
   const requestBody = {
     jsonrpc: '2.0',
@@ -76,45 +81,53 @@ async function getEVMBlock(chain: string): Promise<any> {
     method: 'eth_getBlockByNumber',
     params: ['latest', false],
   };
-  
+
   console.log('[RPC] Request:', { chain, method: requestBody.method });
-  
+
   const blockResponse = await fetch(endpoint, {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
-      'accept': 'application/json',
+      accept: 'application/json',
     },
     body: JSON.stringify(requestBody),
   });
-  
-  console.log('[RPC] Response status:', { chain, status: blockResponse.status, ok: blockResponse.ok });
-  
+
+  console.log('[RPC] Response status:', {
+    chain,
+    status: blockResponse.status,
+    ok: blockResponse.ok,
+  });
+
   if (!blockResponse.ok) {
     const errorText = await blockResponse.text();
     console.error('[RPC] HTTP error:', { chain, status: blockResponse.status, error: errorText });
     throw new Error(`RPC request failed: ${blockResponse.status} ${errorText}`);
   }
-  
+
   const blockData = await blockResponse.json();
-  console.log('[RPC] Response data:', { chain, hasResult: !!blockData.result, hasError: !!blockData.error });
-  
+  console.log('[RPC] Response data:', {
+    chain,
+    hasResult: !!blockData.result,
+    hasError: !!blockData.error,
+  });
+
   if (blockData.error) {
     console.error('[RPC] RPC error:', { chain, error: blockData.error });
     throw new Error(`RPC error: ${blockData.error.message || JSON.stringify(blockData.error)}`);
   }
-  
+
   if (!blockData.result) {
     console.error('[RPC] No result:', { chain, blockData });
     throw new Error('RPC returned no result');
   }
-  
+
   const block = blockData.result;
   const blockNumber = parseInt(block.number, 16);
   const timestamp = parseInt(block.timestamp, 16);
-  
+
   console.log('[RPC] Success:', { chain, blockNumber, timestamp });
-  
+
   return {
     blockNumber,
     timestamp, // Unix timestamp (seconds)
@@ -127,16 +140,24 @@ async function getEVMBlock(chain: string): Promise<any> {
  */
 async function getBTCBlock(): Promise<any> {
   const endpoint = getRPCEndpoint('btc');
-  
-  // Blockstream API: 获取最新区块（返回数组，取第一个）
-  const blockResponse = await fetch(`${endpoint}blocks/tip`);
+
+  const heightResponse = await fetch(`${endpoint}blocks/tip/height`);
+  if (!heightResponse.ok) {
+    throw new Error(`Blockstream height API error: ${heightResponse.status}`);
+  }
+  const height = Number((await heightResponse.text()).trim());
+  const hashResponse = await fetch(`${endpoint}block-height/${height}`);
+  if (!hashResponse.ok) {
+    throw new Error(`Blockstream block-height API error: ${hashResponse.status}`);
+  }
+  const hash = (await hashResponse.text()).trim();
+  const blockResponse = await fetch(`${endpoint}block/${hash}`);
   if (!blockResponse.ok) {
     throw new Error(`Blockstream API error: ${blockResponse.status}`);
   }
-  
-  const blocks = await blockResponse.json();
-  const block = Array.isArray(blocks) ? blocks[0] : blocks;
-  
+
+  const block = await blockResponse.json();
+
   return {
     blockNumber: block.height,
     timestamp: block.timestamp, // Unix timestamp (seconds)
@@ -149,7 +170,7 @@ async function getBTCBlock(): Promise<any> {
  */
 async function getSOLBlock(): Promise<any> {
   const endpoint = getSolanaRPCEndpoint();
-  
+
   // Solana RPC: 获取最新 slot
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -161,19 +182,19 @@ async function getSOLBlock(): Promise<any> {
       params: [],
     }),
   });
-  
+
   const slotData = await response.json();
-  
+
   if (slotData.error) {
     throw new Error(`Solana RPC error: ${slotData.error.message || slotData.error.code}`);
   }
-  
+
   const slot = slotData.result;
-  
+
   if (!slot) {
     throw new Error('Failed to get Solana slot');
   }
-  
+
   // 获取区块时间
   const blockTimeResponse = await fetch(endpoint, {
     method: 'POST',
@@ -185,10 +206,10 @@ async function getSOLBlock(): Promise<any> {
       params: [slot],
     }),
   });
-  
+
   const blockTimeData = await blockTimeResponse.json();
   const timestamp = blockTimeData.result;
-  
+
   // 如果 getBlockTime 返回 null，尝试使用 getBlock 获取时间戳
   if (!timestamp) {
     const blockResponse = await fetch(endpoint, {
@@ -202,7 +223,7 @@ async function getSOLBlock(): Promise<any> {
       }),
     });
     const blockData = await blockResponse.json();
-    
+
     if (blockData.error) {
       // 如果 getBlock 也失败，使用当前时间作为估算
       const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -212,7 +233,7 @@ async function getSOLBlock(): Promise<any> {
         delaySeconds: 0,
       };
     }
-    
+
     const blockTimestamp = blockData.result?.blockTime || Math.floor(Date.now() / 1000);
     return {
       blockNumber: slot,
@@ -220,7 +241,7 @@ async function getSOLBlock(): Promise<any> {
       delaySeconds: blockTimestamp ? Math.floor(Date.now() / 1000) - blockTimestamp : 0,
     };
   }
-  
+
   return {
     blockNumber: slot,
     timestamp: timestamp, // Unix timestamp (seconds)
@@ -234,14 +255,14 @@ async function getSOLBlock(): Promise<any> {
 export async function getBlockTimeDelayRPC(
   request: Request,
   chain: string,
-  cache: Cache | null
+  cache: Cache | null,
 ): Promise<Response> {
   try {
     const chainLower = chain.toLowerCase();
     console.log('[BlockTimeDelayRPC] Starting:', { chain: chainLower });
-    
+
     let result;
-    
+
     if (['eth', 'bsc', 'polygon'].includes(chainLower)) {
       result = await getEVMBlock(chainLower);
     } else if (chainLower === 'btc') {
@@ -250,14 +271,21 @@ export async function getBlockTimeDelayRPC(
       result = await getSOLBlock();
     } else {
       console.error('[BlockTimeDelayRPC] Unsupported chain:', { chain: chainLower });
-      return jsonResponse({
-        success: false,
-        error: { code: 'UNSUPPORTED_CHAIN', message: `Unsupported chain: ${chain}` },
-      }, 400);
+      return jsonResponse(
+        {
+          success: false,
+          error: { code: 'UNSUPPORTED_CHAIN', message: `Unsupported chain: ${chain}` },
+        },
+        400,
+      );
     }
-    
-    console.log('[BlockTimeDelayRPC] Success:', { chain: chainLower, blockNumber: result.blockNumber, delaySeconds: result.delaySeconds });
-    
+
+    console.log('[BlockTimeDelayRPC] Success:', {
+      chain: chainLower,
+      blockNumber: result.blockNumber,
+      delaySeconds: result.delaySeconds,
+    });
+
     return jsonResponse({
       success: true,
       data: {
@@ -268,11 +296,21 @@ export async function getBlockTimeDelayRPC(
       },
     });
   } catch (error) {
-    console.error('[BlockTimeDelayRPC] Error:', { chain, error: error instanceof Error ? error.message : 'Unknown error', stack: error instanceof Error ? error.stack : undefined });
-    return jsonResponse({
-      success: false,
-      error: { code: 'RPC_ERROR', message: error instanceof Error ? error.message : 'Unknown error' },
-    }, 500);
+    console.error('[BlockTimeDelayRPC] Error:', {
+      chain,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return jsonResponse(
+      {
+        success: false,
+        error: {
+          code: 'RPC_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      },
+      500,
+    );
   }
 }
 
@@ -281,7 +319,7 @@ export async function getBlockTimeDelayRPC(
  */
 async function getEVMGasPrice(chain: string): Promise<any> {
   const endpoint = getRPCEndpoint(chain);
-  
+
   // 获取当前建议的 gas price
   const gasPriceResponse = await fetch(endpoint, {
     method: 'POST',
@@ -293,21 +331,21 @@ async function getEVMGasPrice(chain: string): Promise<any> {
       params: [],
     }),
   });
-  
+
   if (!gasPriceResponse.ok) {
     throw new Error(`RPC request failed: ${gasPriceResponse.status}`);
   }
-  
+
   const gasPriceData = await gasPriceResponse.json();
-  
+
   if (gasPriceData.error) {
     throw new Error(`RPC error: ${gasPriceData.error.message}`);
   }
-  
+
   // 转换为 Gwei (1 Gwei = 10^9 Wei)
   const gasPriceWei = parseInt(gasPriceData.result, 16);
   const gasPriceGwei = gasPriceWei / 1e9;
-  
+
   return {
     avgGasGwei: gasPriceGwei,
     medianGasGwei: gasPriceGwei, // RPC 只返回一个值，用平均值作为中位数
@@ -321,17 +359,17 @@ async function getEVMGasPrice(chain: string): Promise<any> {
  */
 async function getBTCFeeRate(): Promise<any> {
   const endpoint = getRPCEndpoint('btc');
-  
+
   // Blockstream API: 获取费用估算
   const feeResponse = await fetch(`${endpoint}fee-estimates`);
   if (!feeResponse.ok) {
     throw new Error(`Blockstream API error: ${feeResponse.status}`);
   }
-  
+
   const feeEstimates = await feeResponse.json();
   // 获取 6 个区块确认的费用（sat/vB）
   const feeRate = feeEstimates['6'] || feeEstimates['1'] || Object.values(feeEstimates)[0];
-  
+
   // 转换为类似 Gwei 的格式（保留为 sat/vB，但统一接口）
   return {
     avgGasGwei: Number(feeRate),
@@ -353,7 +391,7 @@ async function getSOLFeeRate(): Promise<any> {
 
   // 使用 Alchemy 端点
   const endpoint = getSolanaRPCEndpoint();
-  
+
   try {
     console.log('[SOLFeeRate] Using endpoint:', endpoint.replace(/\/v2\/[^/]+/, '/v2/***'));
 
@@ -427,7 +465,7 @@ async function getSOLFeeRate(): Promise<any> {
 async function getSOLTPS(): Promise<any> {
   // 使用 Alchemy 端点
   const endpoint = getSolanaRPCEndpoint();
-  
+
   try {
     console.log('[SOLTPS] Using endpoint:', endpoint.replace(/\/v2\/[^/]+/, '/v2/***'));
 
@@ -481,7 +519,9 @@ async function getSOLTPS(): Promise<any> {
     };
   } catch (error) {
     console.error('[SOLTPS] Error:', error instanceof Error ? error.message : 'Unknown error');
-    throw new Error(`Solana TPS RPC failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Solana TPS RPC failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 }
 
@@ -491,23 +531,26 @@ async function getSOLTPS(): Promise<any> {
 export async function getTPSRPC(
   request: Request,
   chain: string,
-  cache: Cache | null
+  cache: Cache | null,
 ): Promise<Response> {
   try {
     const chainLower = chain.toLowerCase();
-    
+
     if (chainLower !== 'sol') {
-      return jsonResponse({
-        success: false,
-        error: { 
-          code: 'UNSUPPORTED_CHAIN', 
-          message: `TPS RPC is only supported for Solana. Chain: ${chain}` 
+      return jsonResponse(
+        {
+          success: false,
+          error: {
+            code: 'UNSUPPORTED_CHAIN',
+            message: `TPS RPC is only supported for Solana. Chain: ${chain}`,
+          },
         },
-      }, 400);
+        400,
+      );
     }
-    
+
     const result = await getSOLTPS();
-    
+
     return jsonResponse({
       success: true,
       data: {
@@ -519,10 +562,16 @@ export async function getTPSRPC(
       },
     });
   } catch (error) {
-    return jsonResponse({
-      success: false,
-      error: { code: 'RPC_ERROR', message: error instanceof Error ? error.message : 'Unknown error' },
-    }, 500);
+    return jsonResponse(
+      {
+        success: false,
+        error: {
+          code: 'RPC_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      },
+      500,
+    );
   }
 }
 
@@ -533,12 +582,12 @@ export async function getTPSRPC(
 export async function getGasPriceRPC(
   request: Request,
   chain: string,
-  cache: Cache | null
+  cache: Cache | null,
 ): Promise<Response> {
   try {
     const chainLower = chain.toLowerCase();
     let result;
-    
+
     if (['eth', 'bsc', 'polygon'].includes(chainLower)) {
       // EVM 链：获取 Gas Price
       result = await getEVMGasPrice(chainLower);
@@ -550,12 +599,15 @@ export async function getGasPriceRPC(
       // Solana：获取交易费用
       result = await getSOLFeeRate();
     } else {
-      return jsonResponse({
-        success: false,
-        error: { code: 'UNSUPPORTED_CHAIN', message: `Unsupported chain: ${chain}` },
-      }, 400);
+      return jsonResponse(
+        {
+          success: false,
+          error: { code: 'UNSUPPORTED_CHAIN', message: `Unsupported chain: ${chain}` },
+        },
+        400,
+      );
     }
-    
+
     return jsonResponse({
       success: true,
       data: {
@@ -564,10 +616,16 @@ export async function getGasPriceRPC(
       },
     });
   } catch (error) {
-    return jsonResponse({
-      success: false,
-      error: { code: 'RPC_ERROR', message: error instanceof Error ? error.message : 'Unknown error' },
-    }, 500);
+    return jsonResponse(
+      {
+        success: false,
+        error: {
+          code: 'RPC_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      },
+      500,
+    );
   }
 }
 

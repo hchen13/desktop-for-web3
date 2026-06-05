@@ -3,6 +3,7 @@
  */
 
 export type ChainId = 'btc' | 'eth' | 'sol' | 'bsc' | 'polygon';
+export type ChainMetricKey = 'blockTimeDelay' | 'gasPrice' | 'tps' | 'activeAddresses' | 'tvl';
 
 /**
  * 数据源类型
@@ -52,6 +53,8 @@ export interface TPS {
  */
 export interface ActiveAddresses {
   activeAddresses: number;
+  sampleSize?: number;
+  periodSeconds?: number;
   source?: DataSource; // 数据来源
 }
 
@@ -76,6 +79,8 @@ export interface ChainMetrics {
   activeAddresses: ActiveAddresses | null;
   tvl: TVL | null;
   lastUpdate: number; // 最后更新时间戳
+  metricUpdatedAt?: Partial<Record<ChainMetricKey, number>>;
+  metricErrors?: Partial<Record<ChainMetricKey, string>>;
 }
 
 /**
