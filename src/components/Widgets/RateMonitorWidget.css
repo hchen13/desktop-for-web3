@@ -10,8 +10,8 @@
 .rate-monitor {
   width: 100%;
   height: 100%;
-  background: #0D0E12;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--widget-bg);
+  border: var(--widget-border);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
@@ -50,11 +50,11 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  color: #FF9900;
+  color: var(--terminal-orange);
 }
 
 .rate-monitor__status-content--live {
-  color: #00FF88;
+  color: var(--green-up);
 }
 
 .rate-monitor__status-icon {
@@ -108,10 +108,10 @@
   width: 34px;
   height: 18px;
   padding: 0 2px;
-  background: rgba(35, 44, 72, 0.3);
+  background: var(--bg-control);
   border: none;
   border-radius: 4px;
-  color: #FFFFFF;
+  color: var(--text-primary);
   font-size: 9px;
   font-weight: 600;
   font-family: inherit;
@@ -125,7 +125,7 @@
 }
 
 .rate-monitor__currency-btn:hover {
-  background: rgba(35, 44, 72, 0.5);
+  background: var(--bg-control-hover);
 }
 
 /* Swap 按钮 */
@@ -139,7 +139,7 @@
   background: transparent;
   border: none;
   border-radius: 50%;
-  color: #FF9900;
+  color: var(--terminal-orange);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.2s ease;
   flex-shrink: 0;
@@ -151,7 +151,7 @@
 }
 
 .rate-monitor__swap-btn:hover {
-  background: rgba(255, 153, 0, 0.2);
+  background: rgba(245, 158, 11, 0.18);
 }
 
 .rate-monitor__swap-btn:active {
@@ -173,12 +173,12 @@
   position: fixed;
   transform: translateX(-50%);
   min-width: 48px;
-  background: #0a0a0a;
-  border: 1px solid #232c48;
+  background: var(--bg-panel);
+  border: var(--widget-border);
   border-radius: 6px;
   z-index: 9999;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-elevated);
 }
 
 .rate-monitor__dropdown-item {
@@ -186,7 +186,7 @@
   padding: 6px 10px;
   background: transparent;
   border: none;
-  color: #FFFFFF;
+  color: var(--text-primary);
   font-size: 10px;
   font-weight: 500;
   font-family: inherit;
@@ -197,12 +197,12 @@
 }
 
 .rate-monitor__dropdown-item:hover {
-  background: rgba(255, 153, 0, 0.15);
+  background: rgba(245, 158, 11, 0.16);
 }
 
 .rate-monitor__dropdown-item--active {
-  background: rgba(0, 163, 255, 0.2);
-  color: #00A3FF;
+  background: rgba(0, 149, 255, 0.18);
+  color: var(--terminal-blue);
 }
 
 /* ==================== 汇率显示 ==================== */
@@ -217,7 +217,7 @@
 
 .rate-monitor__rate-value {
   font-weight: 700;
-  color: #00A3FF;
+  color: var(--terminal-blue);
   letter-spacing: -0.02em;
   line-height: 1;
   white-space: nowrap;
@@ -236,7 +236,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: #FF9900;
+  background: var(--terminal-orange);
   opacity: 0.8;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }

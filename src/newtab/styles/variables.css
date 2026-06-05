@@ -9,38 +9,45 @@
   --grid-padding-y: 16px;
   --fixed-area-height: 72px;
 
-  /* 背景色系统 - Bloomberg 风格深色模式 */
-  --bg-root: #1a1b1e;
-  --bg-panel: #0a0b0d;
-  --bg-elevated: #2d2f36;
+  --bg-root: #08090d;
+  --bg-primary: var(--bg-root);
+  --bg-panel: #0d1017;
+  --bg-elevated: #151925;
+  --bg-control: rgba(22, 27, 38, 0.72);
+  --bg-control-hover: rgba(34, 41, 55, 0.78);
+  --bg-control-active: rgba(255, 255, 255, 0.10);
+  --bg-scrim: rgba(0, 0, 0, 0.62);
+  --widget-bg: rgba(10, 12, 18, 0.94);
+  --widget-border: 1px solid rgba(255, 255, 255, 0.08);
+  --widget-header-bg: rgba(255, 255, 255, 0.045);
+  --widget-divider: rgba(255, 255, 255, 0.06);
+  --grid-cell-border: rgba(255, 255, 255, 0.028);
 
   /* 终端风格色彩 (Calendar Widget) */
-  --terminal-bg: #0a0b0d;
-  --terminal-header-bg: #14171a;
+  --terminal-bg: var(--widget-bg);
+  --terminal-header-bg: var(--widget-header-bg);
   --terminal-blue: #0095ff;
-  --terminal-orange: #FF9900;
-  --terminal-grid-line: rgba(255, 255, 255, 0.12);
+  --terminal-orange: #f59e0b;
+  --terminal-grid-line: rgba(255, 255, 255, 0.10);
   --terminal-text-dim: rgba(255, 255, 255, 0.4);
   --terminal-text-primary: rgba(255, 255, 255, 0.9);
-  --terminal-container-border: #1c1f24;
+  --terminal-container-border: rgba(255, 255, 255, 0.08);
 
-  /* 文本颜色 - 高对比度 */
-  --text-primary: #ffffff;
-  --text-secondary: #a8adb7;
-  --text-tertiary: #6b7280;
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.64);
+  --text-tertiary: rgba(255, 255, 255, 0.40);
 
-  /* 语义色 - 金融数据风格 */
-  --green-up: #00d395;
-  --red-down: #ff4757;
+  --green-up: #00c087;
+  --red-down: #ff4d5e;
   --blue-main: #3b82f6;
-  --yellow-warn: #ffa502;
+  --yellow-warn: #f59e0b;
 
   /* 兼容旧变量名 */
-  --color-up: #00d395;
-  --color-down: #ff4757;
+  --color-up: var(--green-up);
+  --color-down: var(--red-down);
   --color-brand: #3b82f6;
-  --color-pump: #00d395;
-  --color-dump: #ff4757;
+  --color-pump: var(--green-up);
+  --color-dump: var(--red-down);
 
   /* 圆角系统 - 符合设计规范 */
   --radius-sm: 8px;
@@ -49,12 +56,13 @@
   --radius-xl: 20px;
 
   /* 阴影 - 极度克制 */
-  --shadow-subtle: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-subtle: 0 4px 24px rgba(0, 0, 0, 0.42);
+  --shadow-elevated: 0 18px 48px rgba(0, 0, 0, 0.46), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
 
   /* 毛玻璃效果 - 有限使用（搜索框、悬浮层） */
-  --glass-bg: rgba(255, 255, 255, 0.06);
-  --glass-bg-hover: rgba(255, 255, 255, 0.10);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(12, 15, 21, 0.58);
+  --glass-bg-hover: rgba(18, 22, 31, 0.72);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.10);
   --glass-blur: blur(20px);
 
   /* 间距 */

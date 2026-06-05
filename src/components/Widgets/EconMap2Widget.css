@@ -3,12 +3,12 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  color: var(--text-primary, #e5e5e5);
+  color: var(--text-primary);
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: var(--widget-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  --econ-map2-nodata: #251c14;
+  --econ-map2-nodata: rgba(245, 158, 11, 0.10);
 }
 
 .econ-map2-widget__header {
@@ -16,8 +16,8 @@
   align-items: center;
   flex-shrink: 0;
   padding: 8px 12px 6px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid var(--widget-divider);
+  background: var(--widget-header-bg);
 }
 
 .econ-map2-widget__tabs {
@@ -36,18 +36,18 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.4px;
-  color: #8b8f97;
+  color: var(--text-tertiary);
   cursor: pointer;
   text-align: center;
   transition: color 0.15s ease, opacity 0.15s ease;
 }
 
 .econ-map2-widget__tab:hover {
-  color: #b1b6bf;
+  color: var(--text-secondary);
 }
 
 .econ-map2-widget__tab.is-active {
-  color: var(--accent, #ff9800);
+  color: var(--terminal-orange);
 }
 
 /* Custom Dropdown Component - matches chain-monitor style */
@@ -61,7 +61,7 @@
   gap: 4px;
   background: transparent;
   border: none;
-  color: var(--accent, #ff9800);
+  color: var(--terminal-orange);
   font-size: 12px;
   font-weight: 600;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
@@ -81,7 +81,7 @@
 .econ-map2-widget__dropdown-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--accent, #ff9800);
+  color: var(--terminal-orange);
 }
 
 .econ-map2-widget__dropdown-arrow {
@@ -103,10 +103,10 @@
   margin: 0;
   padding: 4px;
   list-style: none;
-  background: #1A1B23;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-panel);
+  border: var(--widget-border);
   border-radius: 8px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-elevated);
   z-index: 100;
 }
 
@@ -118,7 +118,7 @@
   padding: 8px 10px;
   background: transparent;
   border: none;
-  color: #FFFFFF;
+  color: var(--text-primary);
   font-size: 12px;
   cursor: pointer;
   border-radius: 4px;
@@ -132,7 +132,7 @@
 
 .econ-map2-widget__dropdown-item.selected {
   background: rgba(255, 152, 0, 0.2);
-  color: var(--accent, #ff9800);
+  color: var(--terminal-orange);
 }
 
 .econ-map2-widget__map-wrapper {
@@ -147,23 +147,23 @@
 }
 
 .econ-map2-widget__country {
-  stroke: #000000;
+  stroke: var(--bg-root);
   stroke-width: 0.8;
   transition: stroke 150ms ease, stroke-width 150ms ease;
 }
 
 .econ-map2-widget__country:hover {
-  stroke: #00A3FF;
+  stroke: var(--terminal-blue);
   stroke-width: 1.5;
 }
 
 .econ-map2-widget__tooltip {
   position: absolute;
   background: rgba(12, 15, 20, 0.95);
-  border: 1px solid var(--grid-border, #2a2f38);
+  border: var(--widget-border);
   padding: 6px 10px;
   font-size: 11px;
-  color: var(--text-primary, #e5e5e5);
+  color: var(--text-primary);
   border-radius: 4px;
   pointer-events: none;
   white-space: nowrap;
@@ -177,14 +177,14 @@
 
 .econ-map2-widget__tooltip-metric {
   font-size: 10px;
-  color: var(--text-secondary, #9aa0a6);
+  color: var(--text-secondary);
   margin-bottom: 2px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
 
 .econ-map2-widget__tooltip-value {
-  color: var(--accent, #ff9800);
+  color: var(--terminal-orange);
   font-family: monospace;
 }
 
@@ -201,8 +201,8 @@
 .econ-map2-widget__loading-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--grid-border, #2a2f38);
-  border-top-color: var(--accent, #ff9800);
+  border: 2px solid var(--widget-divider);
+  border-top-color: var(--terminal-orange);
   border-radius: 50%;
   animation: econ-map2-spin 1s linear infinite;
 }
