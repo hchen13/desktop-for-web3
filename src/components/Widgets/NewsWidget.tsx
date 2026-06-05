@@ -27,6 +27,7 @@ const getTagConfig = (tag: string): { label: string } => {
 
 const formatTime = (isoDate: string, currentTime: number): string => {
   const date = new Date(isoDate);
+  if (!Number.isFinite(date.getTime())) return '';
   const diff = currentTime - date.getTime();
 
   const minutes = Math.floor(diff / (1000 * 60));
@@ -73,6 +74,18 @@ const SyncingIndicator = () => (
 const LiveDot = () => (
   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
     <circle cx="6" cy="6" r="4" fill="currentColor" class="news-widget__live-pulse" />
+  </svg>
+);
+
+const RetryIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+    <path
+      d="M20 12a8 8 0 0 1-13.657 5.657M4 12A8 8 0 0 1 17.657 6.343"
+      stroke="currentColor"
+      stroke-width="3"
+      stroke-linecap="round"
+    />
+    <path d="M7 18H3v-4M17 6h4v4" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
   </svg>
 );
 
@@ -123,6 +136,28 @@ export const NewsWidget = (props: NewsWidgetProps) => {
     window.open(link, '_blank');
   };
 
+  const statusLabel = () => {
+    if (state().status === 'syncing') return 'SYNCING';
+    if (state().status === 'error') return state().items.length > 0 ? 'CACHED' : 'RETRY';
+    return 'LIVE';
+  };
+
+  const statusAriaLabel = () => {
+    if (state().status === 'syncing') return '同步中';
+    if (state().status === 'error') return '数据源重试中';
+    return '实时更新';
+  };
+
+  const statusClass = () => ({
+    'news-widget__status-pill': true,
+    'news-widget__status-pill--live': state().status === 'live',
+    'news-widget__status-pill--error': state().status === 'error',
+  });
+
+  const canShowSkeleton = () => state().status === 'syncing' && state().items.length === 0;
+
+  const hasItems = () => state().items.length > 0;
+
   return (
     <div class="news-widget">
       <header class="news-widget__header">
@@ -132,44 +167,49 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           </span>
           <h2 class="news-widget__title">Web3 资讯</h2>
         </div>
-        <Show
-          when={state().status === 'syncing'}
-          fallback={
-            <div
-              class="news-widget__status-pill news-widget__status-pill--live"
-              aria-label="实时更新"
+        <div classList={statusClass()} aria-label={statusAriaLabel()}>
+          <span
+            classList={{
+              'news-widget__status-icon': true,
+              'news-widget__status-icon--live': state().status === 'live',
+              'news-widget__status-icon--error': state().status === 'error',
+            }}
+          >
+            <Show
+              when={state().status === 'syncing'}
+              fallback={
+                <Show when={state().status === 'error'} fallback={<LiveDot />}>
+                  <RetryIcon />
+                </Show>
+              }
             >
-              <span class="news-widget__status-icon news-widget__status-icon--live">
-                <LiveDot />
-              </span>
-              <span class="news-widget__status-text">LIVE</span>
-            </div>
-          }
-        >
-          <div class="news-widget__status-pill" aria-label="同步中">
-            <span class="news-widget__status-icon">
               <SyncingIndicator />
-            </span>
-            <span class="news-widget__status-text">SYNCING</span>
-          </div>
-        </Show>
+            </Show>
+          </span>
+          <span class="news-widget__status-text">{statusLabel()}</span>
+        </div>
       </header>
 
       <div class="news-widget__content">
         <Show
-          when={state().items.length > 0}
+          when={hasItems()}
           fallback={
-            <div class="news-widget__skeleton">
-              <For each={SKELETON_ITEMS}>
-                {() => (
-                  <div class="news-item-skeleton">
-                    <div class="news-item-skeleton__meta" />
-                    <div class="news-item-skeleton__title" />
-                    <div class="news-item-skeleton__source" />
-                  </div>
-                )}
-              </For>
-            </div>
+            <Show
+              when={canShowSkeleton()}
+              fallback={<div class="news-widget__empty">数据源重试中</div>}
+            >
+              <div class="news-widget__skeleton">
+                <For each={SKELETON_ITEMS}>
+                  {() => (
+                    <div class="news-item-skeleton">
+                      <div class="news-item-skeleton__meta" />
+                      <div class="news-item-skeleton__title" />
+                      <div class="news-item-skeleton__source" />
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
           }
         >
           <div class="news-widget__list">
@@ -271,6 +311,11 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           border-color: rgba(0, 192, 135, 0.22);
         }
 
+        .news-widget__status-pill--error {
+          background: rgba(239, 68, 68, 0.10);
+          border-color: rgba(239, 68, 68, 0.22);
+        }
+
         .news-widget__status-icon {
           color: var(--terminal-orange);
           display: flex;
@@ -283,6 +328,10 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           color: var(--green-up);
         }
 
+        .news-widget__status-icon--error {
+          color: var(--red-down);
+        }
+
         .news-widget__status-text {
           font-size: 9px;
           font-weight: 700;
@@ -292,6 +341,10 @@ export const NewsWidget = (props: NewsWidgetProps) => {
 
         .news-widget__status-pill--live .news-widget__status-text {
           color: var(--green-up);
+        }
+
+        .news-widget__status-pill--error .news-widget__status-text {
+          color: var(--red-down);
         }
 
         .news-widget__sync-spin {
@@ -442,6 +495,16 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-widget__skeleton {
           display: flex;
           flex-direction: column;
+        }
+
+        .news-widget__empty {
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--text-tertiary);
+          font-size: 12px;
+          font-weight: 600;
         }
 
         .news-item-skeleton {

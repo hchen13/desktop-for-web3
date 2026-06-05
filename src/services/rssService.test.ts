@@ -2,11 +2,12 @@
  * RSS service tests
  * 通过暴露的纯函数 helper 测试核心逻辑
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   dedupeBySourceForTest,
   parseXMLForTest,
   mergeAndSortForTest,
+  RSSService,
   type RSSItem,
 } from './rssService';
 
@@ -146,6 +147,44 @@ describe('mergeAndSort', () => {
   it('empty map returns empty array', () => {
     const result = mergeAndSortForTest(new Map());
     expect(result).toEqual([]);
+  });
+});
+
+describe('RSSService sync resilience', () => {
+  it('all sources fail with cache: keeps cached items and reports retry state', async () => {
+    const cached = item({
+      guid: 'cached-1',
+      title: 'cached',
+      pubDate: '2024-01-01T00:00:00Z',
+    });
+    (globalThis as any).__memoryStorage.__setStore({
+      'news-cache': {
+        items: [cached],
+        timestamp: 1700000000000,
+        version: '1.0',
+      },
+    });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 500 }));
+
+    const service = new RSSService({ syncInterval: 60_000 });
+    await service.sync();
+
+    const state = service.getState();
+    expect(state.status).toBe('error');
+    expect(state.items).toEqual([cached]);
+    expect(state.lastSync).toBe(1700000000000);
+    expect((globalThis as any).__memoryStorage.__getStore()['news-cache'].items).toEqual([cached]);
+  });
+
+  it('all sources fail without cache: exits loading state with empty retry state', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 500 }));
+
+    const service = new RSSService({ syncInterval: 60_000 });
+    await service.sync();
+
+    const state = service.getState();
+    expect(state.status).toBe('error');
+    expect(state.items).toEqual([]);
   });
 });
 

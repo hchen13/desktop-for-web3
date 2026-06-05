@@ -24,6 +24,8 @@ import type {
 import { DEFAULT_WATCHLIST_SETTINGS } from '../../config/widgetDefaults';
 
 const DRAG_THRESHOLD = 5;
+const MISSING_PRICE_RETRY_DELAY_MS = 12000;
+const STALE_PRICE_MS = 5 * 60 * 1000;
 
 const formatPrice = (price: number): string => {
   if (!Number.isFinite(price)) return '--';
@@ -59,15 +61,24 @@ function logoFor(meta: AssetMeta): string[] {
   return getLogoUrlChain(meta);
 }
 
-const PriceDisplay = (props: { snapshot: PriceSnapshot }) => {
+const PriceDisplay = (props: { snapshot: PriceSnapshot; now: number }) => {
   // 必须用 accessor 让 props 变化能被 reactive system 感知；
   // 直接 const change = props.snapshot.change24h 是一次性快照，prop 改了也不更新（SolidJS gotcha）
   const change = () => props.snapshot.change24h;
   const isValid = () => change() !== null && Number.isFinite(change());
   const cls = () => (isValid() && change()! >= 0 ? 'up' : 'down');
+  const isStale = () => props.now - props.snapshot.lastUpdate > STALE_PRICE_MS;
   return (
     <div class="price-item__values">
-      <span class="price-item__price">{formatPrice(props.snapshot.price)}</span>
+      <span
+        classList={{
+          'price-item__price': true,
+          'price-item__price--stale': isStale(),
+        }}
+        title={isStale() ? '数据源重试中' : undefined}
+      >
+        {formatPrice(props.snapshot.price)}
+      </span>
       <span class={`price-item__change ${cls()}`}>{formatChange(change())}</span>
     </div>
   );
@@ -76,6 +87,8 @@ const PriceDisplay = (props: { snapshot: PriceSnapshot }) => {
 interface CoinRowProps {
   setting: WatchlistCoinSetting;
   getSnapshot: (symbol: string) => PriceSnapshot | null;
+  isDataLate: boolean;
+  now: number;
   onNameClick?: () => void;
   onRowClick?: () => void;
 }
@@ -154,11 +167,13 @@ const CoinRow = (props: CoinRowProps) => {
         when={snap() != null}
         fallback={
           <div class="price-item__values">
-            <span class="price-item__loading">价格获取中</span>
+            <span class="price-item__loading">
+              {props.isDataLate ? '数据源重试中' : '价格获取中'}
+            </span>
           </div>
         }
       >
-        <PriceDisplay snapshot={snap()!} />
+        <PriceDisplay snapshot={snap()!} now={props.now} />
       </Show>
     </div>
   );
@@ -196,6 +211,8 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   const [snapshots, setSnapshots] = createSignal<Map<string, PriceSnapshot>>(new Map());
   const [isEditDialogOpen, setIsEditDialogOpen] = createSignal(false);
   const [editSlotIndex, setEditSlotIndex] = createSignal<number | undefined>(undefined);
+  const [loadStartedAt, setLoadStartedAt] = createSignal(Date.now());
+  const [now, setNow] = createSignal(Date.now());
 
   const { ContextMenuComponent, showContextMenu } = useContextMenu();
 
@@ -220,6 +237,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
       unsubscribe = null;
     }
     const symbols = new Set(coins().map((c) => c.symbol));
+    setLoadStartedAt(Date.now());
     unsubscribe = priceService.subscribe(symbols, (snap) => {
       setSnapshots(new Map(snap));
     });
@@ -276,22 +294,35 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
     return { symbol: c.symbol, name: c.name, category: c.category };
   });
 
+  const rowCount = createMemo(() => Math.max(coins().length, 1));
+  const isDataLate = createMemo(() => now() - loadStartedAt() > MISSING_PRICE_RETRY_DELAY_MS);
+
   onMount(() => {
     subscribeToService();
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 30000);
     onCleanup(() => {
       unsubscribe?.();
       unsubscribe = null;
+      clearInterval(timer);
     });
   });
 
   return (
-    <div class="watchlist-widget" onContextMenu={handleContextMenu}>
+    <div
+      class="watchlist-widget"
+      style={{ '--watchlist-row-count': String(rowCount()) }}
+      onContextMenu={handleContextMenu}
+    >
       <div class="watchlist-widget__list">
         <Index each={coins()}>
           {(coinFn, index) => (
             <CoinRow
               setting={coinFn()}
               getSnapshot={getSnapshot}
+              isDataLate={isDataLate()}
+              now={now()}
               onNameClick={() => handleCoinNameClick(index)}
               onRowClick={() => handleRowClick(index)}
             />
@@ -326,7 +357,12 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           display: flex;
           flex-direction: column;
           flex: 1;
-          overflow: hidden;
+          overflow-y: auto;
+          min-height: 0;
+          scrollbar-width: none;
+        }
+        .watchlist-widget__list::-webkit-scrollbar {
+          display: none;
         }
         .price-item {
           display: flex;
@@ -334,7 +370,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           padding: 0 var(--space-xs);
           border-radius: var(--radius-sm);
           transition: background 0.15s ease;
-          flex: 0 0 calc(100% / 5);
+          flex: 0 0 max(32px, calc(100% / var(--watchlist-row-count)));
           min-height: 0;
           width: 100%;
           box-sizing: border-box;
@@ -371,6 +407,9 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
           font-feature-settings: "tnum"; font-weight: 500;
           line-height: 1.1; margin: 0; padding: 0;
+        }
+        .price-item__price--stale {
+          color: var(--text-tertiary);
         }
         .price-item__change {
           font-size: 11px;

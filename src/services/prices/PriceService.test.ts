@@ -129,6 +129,37 @@ describe('PriceService — subscribe pool & union', () => {
     expect(symbols).toEqual(['BTC', 'ETH', 'SOL']);
   });
 
+  it('并发刷新不同 symbols 时，后发请求会进入下一批刷新', async () => {
+    let releaseFirstFetch!: () => void;
+    const firstFetchGate = new Promise<void>((resolve) => {
+      releaseFirstFetch = resolve;
+    });
+    let fetchCount = 0;
+    const okx: SourceAdapter = {
+      name: 'okx',
+      probe: vi.fn(async () => 1),
+      fetchPrices: vi.fn(async (assets: AssetMeta[]) => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          await firstFetchGate;
+        }
+        return new Map(assets.map((asset) => [asset.symbol, snap(asset.symbol, 100)]));
+      }),
+    };
+    svc.__setAdaptersForTest([okx]);
+
+    const first = svc.refresh(new Set(['BTC']));
+    await Promise.resolve();
+    const second = svc.refresh(new Set(['ETH']));
+
+    releaseFirstFetch();
+    await Promise.all([first, second]);
+
+    expect(okx.fetchPrices).toHaveBeenCalledTimes(2);
+    expect(svc.getSnapshot('BTC')).not.toBeNull();
+    expect(svc.getSnapshot('ETH')).not.toBeNull();
+  });
+
   it('subscriber 收到的 snapshot 仅含自己 watch 的 symbol', async () => {
     const result = new Map<string, PriceSnapshot>([
       ['BTC', snap('BTC', 70000)],
@@ -204,6 +235,23 @@ describe('PriceService — fallback & error handling', () => {
     expect(got!.price).toBe(70000);
     expect(bad.fetchPrices).toHaveBeenCalled();
     expect(ok.fetchPrices).toHaveBeenCalled();
+  });
+
+  it('primary adapter 只返回部分 symbols 时，用后续 adapter 补齐缺失项', async () => {
+    const partial = makeAdapter('partial', {
+      fetchResult: new Map([['BTC', snap('BTC', 70000, 'partial')]]),
+    });
+    const fallback = makeAdapter('fallback', {
+      fetchResult: new Map([['ETH', snap('ETH', 3500, 'fallback')]]),
+    });
+    svc.__setAdaptersForTest([partial, fallback]);
+
+    await svc.refresh(new Set(['BTC', 'ETH']));
+
+    expect(svc.getSnapshot('BTC')!.source).toBe('partial');
+    expect(svc.getSnapshot('ETH')!.source).toBe('fallback');
+    const fallbackAssets = (fallback.fetchPrices as any).mock.calls[0][0] as AssetMeta[];
+    expect(fallbackAssets.map((asset) => asset.symbol)).toEqual(['ETH']);
   });
 
   it('全部 adapter 失败时不写 snapshot 但不抛错', async () => {

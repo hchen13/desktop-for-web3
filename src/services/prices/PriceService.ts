@@ -25,6 +25,9 @@ import { dynamicCatalog } from './dynamicCatalog';
 
 const STORAGE_KEY = 'prices_cache_v1';
 const REST_INTERVAL_MS = 60 * 1000;
+const PROBE_TIMEOUT_MS = 3000;
+const FETCH_TIMEOUT_MS = 8000;
+const BACKGROUND_REFRESH_DEDUPE_MS = 5000;
 
 interface PersistedCache {
   version: 'v1';
@@ -56,6 +59,8 @@ export class PriceService {
   private pythCleanup: (() => void) | null = null;
   private restoredFromStorage = false;
   private restInFlight: Promise<void> | null = null;
+  private pendingTargets = new Set<string>();
+  private lastFetchAttemptAt = new Map<string, number>();
 
   /** 公开：获取单个 symbol 的最新 snapshot（无则 null） */
   getSnapshot(symbol: string): PriceSnapshot | null {
@@ -100,6 +105,8 @@ export class PriceService {
     this.probePromise = null;
     this.restoredFromStorage = false;
     this.restInFlight = null;
+    this.pendingTargets.clear();
+    this.lastFetchAttemptAt.clear();
     if (this.restTimer) {
       clearInterval(this.restTimer);
       this.restTimer = null;
@@ -162,7 +169,7 @@ export class PriceService {
       this.probePromise = this.probeAdapters()
         .then(() => {
           const union = this.unionSymbols();
-          if (union.size > 0) void this.fetchOnce(union);
+          if (union.size > 0) void this.fetchOnce(union, false);
           if (this.restTimer == null && typeof setInterval === 'function') {
             this.restTimer = setInterval(() => {
               const cur = this.unionSymbols();
@@ -177,15 +184,10 @@ export class PriceService {
   }
 
   private async probeAdapters(): Promise<void> {
-    // 给每个 adapter 的 probe() 加一个 race，避免单家挂死拖住整个排名
-    const PROBE_TIMEOUT_MS = 3000;
     const results = await Promise.all(
       this.adapters.map(async (a) => {
-        const timeoutP = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('probe timeout')), PROBE_TIMEOUT_MS),
-        );
         try {
-          const latency = await Promise.race([a.probe(), timeoutP]);
+          const latency = await this.withTimeout(a.probe(), PROBE_TIMEOUT_MS, 'probe timeout');
           return { adapter: a, latency, ok: true as const };
         } catch (err) {
           return { adapter: a, latency: Infinity, ok: false as const, err };
@@ -197,15 +199,53 @@ export class PriceService {
     this.rankedAdapters = [...ok.map((r) => r.adapter), ...failed];
   }
 
-  private async fetchOnce(targets: Set<string>): Promise<void> {
+  private async fetchOnce(targets: Set<string>, force = true): Promise<void> {
+    if (targets.size === 0) return;
+    const nextTargets = force ? targets : this.filterRecentlyRequestedTargets(targets);
+    if (nextTargets.size === 0) return;
+
+    for (const target of nextTargets) {
+      this.pendingTargets.add(target);
+    }
+
     if (this.restInFlight) {
       await this.restInFlight;
       return;
     }
-    this.restInFlight = this.doFetchOnce(targets).finally(() => {
+
+    this.restInFlight = this.drainFetchQueue().finally(() => {
       this.restInFlight = null;
     });
     await this.restInFlight;
+  }
+
+  private async drainFetchQueue(): Promise<void> {
+    while (true) {
+      if (this.pendingTargets.size === 0) {
+        await Promise.resolve();
+        if (this.pendingTargets.size === 0) return;
+      }
+
+      const batch = new Set(this.pendingTargets);
+      this.pendingTargets.clear();
+      const startedAt = Date.now();
+      for (const symbol of batch) {
+        this.lastFetchAttemptAt.set(symbol, startedAt);
+      }
+      await this.doFetchOnce(batch);
+    }
+  }
+
+  private filterRecentlyRequestedTargets(targets: Set<string>): Set<string> {
+    const now = Date.now();
+    const out = new Set<string>();
+    for (const symbol of targets) {
+      const lastAttempt = this.lastFetchAttemptAt.get(symbol) ?? 0;
+      if (now - lastAttempt >= BACKGROUND_REFRESH_DEDUPE_MS) {
+        out.add(symbol);
+      }
+    }
+    return out;
   }
 
   private async doFetchOnce(targets: Set<string>): Promise<void> {
@@ -216,30 +256,40 @@ export class PriceService {
     }
     if (assets.length === 0) return;
 
-    // CEX REST：按 ranked 顺序尝试
-    let cexResult: Map<string, PriceSnapshot> | null = null;
+    // CEX REST：按 ranked 顺序填补缺失 crypto symbol
     const ranked = this.rankedAdapters.length > 0 ? this.rankedAdapters : this.adapters;
+    const remainingCexSymbols = new Set(
+      assets.filter((a) => a.category === 'crypto' && a.cexPair).map((a) => a.symbol),
+    );
+
     for (const adapter of ranked) {
+      const adapterAssets = assets.filter((a) => remainingCexSymbols.has(a.symbol));
+      if (adapterAssets.length === 0) break;
+
       try {
-        const got = await adapter.fetchPrices(assets);
+        const got = await this.withTimeout(
+          adapter.fetchPrices(adapterAssets),
+          FETCH_TIMEOUT_MS,
+          `${adapter.name} fetch timeout`,
+        );
         if (got.size > 0) {
-          cexResult = got;
-          break;
+          for (const [sym, snap] of got) {
+            this.applySnapshot(sym, snap);
+            remainingCexSymbols.delete(sym);
+          }
         }
       } catch (err) {
         console.warn(`[PriceService] adapter ${adapter.name} failed`, err);
       }
     }
 
-    if (cexResult) {
-      for (const [sym, snap] of cexResult) {
-        this.applySnapshot(sym, snap);
-      }
-    }
-
     // Pyth REST 兜底（覆盖 price，但保留 CEX 的 24h%）
     try {
-      const pythResult = await fetchPythLatest(assets);
+      const pythResult = await this.withTimeout(
+        fetchPythLatest(assets),
+        FETCH_TIMEOUT_MS,
+        'pyth latest timeout',
+      );
       for (const [sym, pSnap] of pythResult) {
         this.mergePythPrice(sym, pSnap);
       }
@@ -254,7 +304,11 @@ export class PriceService {
     });
     if (needsChange.length > 0) {
       try {
-        const prevCloses = await fetchPythPrevDayClose(needsChange);
+        const prevCloses = await this.withTimeout(
+          fetchPythPrevDayClose(needsChange),
+          FETCH_TIMEOUT_MS,
+          'pyth benchmark timeout',
+        );
         for (const [sym, prevClose] of prevCloses) {
           const cur = this.snapshots.get(sym);
           if (!cur || prevClose <= 0) continue;
@@ -268,6 +322,25 @@ export class PriceService {
 
     void this.persistToStorage();
     this.notifyAll();
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+  ): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   private applySnapshot(symbol: string, snap: PriceSnapshot): void {

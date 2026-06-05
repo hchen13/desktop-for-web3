@@ -104,7 +104,7 @@ export const DEFAULT_RATE_MONITOR_SETTINGS: RateMonitorSettings = {
 };
 
 export const DEFAULT_NEWS_SETTINGS: NewsSettings = {
-  source: 'blockbeats',
+  source: 'panews',
   filter: 'all',
 };
 

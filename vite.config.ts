@@ -45,6 +45,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/rss-proxy\/coindesk/, ''),
       },
+      '/rss-proxy/panews': {
+        target: 'https://www.panewslab.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/rss-proxy\/panews/, ''),
+      },
       '/api-proxy/imf': {
         target: 'https://www.imf.org',
         changeOrigin: true,

@@ -6,6 +6,7 @@
 
 const STORAGE_KEY_CACHE = 'news-cache';
 const STORAGE_KEY_INTERVAL = 'news-sync-interval';
+const FETCH_TIMEOUT_MS = 8000;
 
 const isChromeContext = typeof chrome !== 'undefined' && chrome.storage?.local;
 
@@ -66,9 +67,10 @@ export interface RSSCacheData {
 }
 
 export interface RSSDataState {
-  status: 'syncing' | 'live';
+  status: 'syncing' | 'live' | 'error';
   items: RSSItem[];
   lastSync: number;
+  error?: string;
 }
 
 const CACHE_VERSION = '1.0';
@@ -85,13 +87,20 @@ const RSS_SOURCES: Record<string, RSSSourceConfig> = {
       newsflash: {
         url: 'https://api.theblockbeats.news/v2/rss/newsflash',
         tag: 'newsflash',
-        enabled: true,
+        enabled: false,
       },
       article: {
         url: 'https://api.theblockbeats.news/v2/rss/article',
         tag: 'article',
-        enabled: true,
+        enabled: false,
       },
+    },
+  },
+  panews: {
+    name: 'PANews',
+    baseUrl: 'https://www.panewslab.com',
+    channels: {
+      main: { url: 'https://www.panewslab.com/rss.xml?lang=zh', tag: 'newsflash', enabled: true },
     },
   },
   odaily: {
@@ -121,6 +130,8 @@ const RSS_SOURCES: Record<string, RSSSourceConfig> = {
 class RSSService {
   private config: RSSServiceConfig;
   private syncTimer: number | null = null;
+  private syncInFlight: Promise<void> | null = null;
+  private initializePromise: Promise<void> | null = null;
   private listeners: Set<(state: RSSDataState) => void> = new Set();
   private currentState: RSSDataState = {
     status: 'syncing',
@@ -232,8 +243,24 @@ class RSSService {
     return html.replace(/<[^>]*>/g, '').trim();
   }
 
+  private async fetchWithTimeout(url: string): Promise<Response> {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer =
+      controller && typeof setTimeout === 'function'
+        ? window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+        : null;
+
+    try {
+      return await fetch(url, controller ? { signal: controller.signal } : undefined);
+    } finally {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
   private async fetchDirect(url: string): Promise<{ items: any[]; fromRSS2JSON: boolean }> {
-    const response = await fetch(url);
+    const response = await this.fetchWithTimeout(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const xml = await response.text();
     return { items: this.parseXML(xml)?.items || [], fromRSS2JSON: false };
@@ -243,7 +270,7 @@ class RSSService {
     for (const proxy of CORS_PROXIES) {
       try {
         const proxiedUrl = proxy + encodeURIComponent(url);
-        const response = await fetch(proxiedUrl);
+        const response = await this.fetchWithTimeout(proxiedUrl);
         if (!response.ok) continue;
         const xml = await response.text();
         const result = this.parseXML(xml);
@@ -259,7 +286,7 @@ class RSSService {
 
   private async fetchViaRSS2JSON(url: string): Promise<{ items: any[]; fromRSS2JSON: boolean }> {
     const apiUrl = RSS2JSON_API + encodeURIComponent(url);
-    const response = await fetch(apiUrl);
+    const response = await this.fetchWithTimeout(apiUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
 
@@ -290,6 +317,7 @@ class RSSService {
         base: 'https://cointelegraph.com',
       },
       'www.coindesk.com': { prefix: '/rss-proxy/coindesk', base: 'https://www.coindesk.com' },
+      'www.panewslab.com': { prefix: '/rss-proxy/panews', base: 'https://www.panewslab.com' },
     };
 
     for (const [host, config] of Object.entries(proxyMap)) {
@@ -304,7 +332,7 @@ class RSSService {
     const proxyUrl = this.getDevProxyUrl(url);
     if (!proxyUrl) throw new Error('No dev proxy for this URL');
 
-    const response = await fetch(proxyUrl);
+    const response = await this.fetchWithTimeout(proxyUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const xml = await response.text();
     return { items: this.parseXML(xml)?.items || [], fromRSS2JSON: false };
@@ -379,12 +407,16 @@ class RSSService {
       for (const [channelId, channel] of Object.entries(source.channels)) {
         if (!channel.enabled) continue;
 
-        const promise = this.fetchRSS(channel.url, source.name, channel.tag).then((items) => {
-          if (items.length > 0) {
-            const key = `${sourceId}:${channelId}`;
-            results.set(key, items);
-          }
-        });
+        const promise = this.fetchRSS(channel.url, source.name, channel.tag)
+          .then((items) => {
+            if (items.length > 0) {
+              const key = `${sourceId}:${channelId}`;
+              results.set(key, items);
+            }
+          })
+          .catch((error) => {
+            console.warn(`[RSSService] ${source.name}/${channel.tag} failed`, error);
+          });
 
         fetchPromises.push(promise);
       }
@@ -439,6 +471,11 @@ class RSSService {
   }
 
   async getFromCache(): Promise<RSSItem[] | null> {
+    const cached = await this.getCacheData();
+    return cached?.items ?? null;
+  }
+
+  private async getCacheData(): Promise<RSSCacheData | null> {
     try {
       const cached = (await storageGet(STORAGE_KEY_CACHE)) as RSSCacheData;
 
@@ -446,7 +483,7 @@ class RSSService {
         return null;
       }
 
-      return cached.items;
+      return cached;
     } catch (error) {
       console.error('[RSSService] Cache read error:', error);
       return null;
@@ -467,19 +504,52 @@ class RSSService {
   }
 
   async sync(): Promise<void> {
+    if (this.syncInFlight) {
+      await this.syncInFlight;
+      return;
+    }
+
+    this.syncInFlight = this.runSync().finally(() => {
+      this.syncInFlight = null;
+    });
+
+    await this.syncInFlight;
+  }
+
+  private async runSync(): Promise<void> {
     this.updateState({
       ...this.currentState,
       status: 'syncing',
+      error: undefined,
     });
 
     const sourceItems = await this.fetchAllSources();
     const newItems = this.mergeAndSort(sourceItems);
 
-    const cached = await this.getFromCache();
+    const cached = await this.getCacheData();
     let finalItems: RSSItem[];
 
-    if (cached && cached.length > 0) {
-      const merged = [...newItems, ...cached];
+    if (newItems.length === 0) {
+      if (cached && cached.items.length > 0) {
+        this.updateState({
+          status: 'error',
+          items: cached.items,
+          lastSync: cached.timestamp,
+          error: 'rss-source-unavailable',
+        });
+      } else {
+        this.updateState({
+          status: 'error',
+          items: [],
+          lastSync: this.currentState.lastSync,
+          error: 'rss-source-unavailable',
+        });
+      }
+      return;
+    }
+
+    if (cached && cached.items.length > 0) {
+      const merged = [...newItems, ...cached.items];
       finalItems = this.dedupeBySource(merged);
       finalItems.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
       const maxItems = this.config.maxItems || 50;
@@ -494,13 +564,20 @@ class RSSService {
       status: 'live',
       items: finalItems,
       lastSync: Date.now(),
+      error: undefined,
     });
   }
 
   subscribe(callback: (state: RSSDataState) => void): () => void {
     this.listeners.add(callback);
 
-    this.initialize();
+    try {
+      callback({ ...this.currentState });
+    } catch (error) {
+      console.error('[RSSService] Callback error:', error);
+    }
+
+    void this.initialize();
 
     if (this.syncTimer === null) {
       this.syncTimer = window.setInterval(() => {
@@ -519,23 +596,35 @@ class RSSService {
   }
 
   private async initialize(): Promise<void> {
-    const cached = await this.getFromCache();
+    if (this.initializePromise) {
+      await this.initializePromise;
+      return;
+    }
 
-    if (cached && cached.length > 0) {
+    this.initializePromise = this.doInitialize();
+    await this.initializePromise;
+  }
+
+  private async doInitialize(): Promise<void> {
+    const cached = await this.getCacheData();
+
+    if (cached && cached.items.length > 0) {
       this.updateState({
         status: 'syncing',
-        items: cached,
-        lastSync: Date.now(),
+        items: cached.items,
+        lastSync: cached.timestamp,
+        error: undefined,
       });
     } else {
       this.updateState({
         status: 'syncing',
         items: [],
         lastSync: 0,
+        error: undefined,
       });
     }
 
-    this.sync();
+    void this.sync();
   }
 
   getState(): RSSDataState {

@@ -42,7 +42,7 @@
           "size": { "width": 3, "height": 3 },
           "state": {
             "settings": {
-              "source": "blockbeats",
+              "source": "panews",
               "filter": "all"
             }
           }
@@ -790,7 +790,7 @@
           "size": { "width": 3, "height": 3 },
           "state": {
             "settings": {
-              "source": "blockbeats",
+              "source": "panews",
               "filter": "all"
             }
           }
