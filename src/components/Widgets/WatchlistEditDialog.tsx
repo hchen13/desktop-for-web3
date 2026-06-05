@@ -251,7 +251,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
           .watchlist-edit-dialog__overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.6);
+            background: var(--bg-scrim);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -259,8 +259,8 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
           }
 
           .watchlist-edit-dialog {
-            background: #0a0b0d;
-            border: 1px solid #1c1f24;
+            background: var(--bg-panel);
+            border: var(--widget-border);
             border-radius: var(--radius-lg);
             width: 520px;
             max-width: 90vw;
@@ -275,7 +275,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
             align-items: center;
             justify-content: space-between;
             padding: var(--space-md);
-            border-bottom: 1px solid #1c1f24;
+            border-bottom: 1px solid var(--widget-divider);
           }
           .watchlist-edit-dialog__header-left { display: flex; align-items: center; gap: var(--space-sm); }
           .watchlist-edit-dialog__header-info { display: flex; flex-direction: column; }
@@ -291,7 +291,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
           .watchlist-edit-dialog__search { padding: var(--space-sm) var(--space-md); }
           .watchlist-edit-dialog__input {
             width: 100%; padding: var(--space-sm) var(--space-md);
-            background: rgba(255, 255, 255, 0.04); border: 1px solid #1c1f24;
+            background: var(--bg-control); border: var(--widget-border);
             border-radius: var(--radius-sm); color: var(--text-primary);
             font-size: 14px; outline: none; box-sizing: border-box;
           }
@@ -300,7 +300,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
 
           .watchlist-edit-dialog__tabs {
             display: flex; gap: var(--space-xs); padding: var(--space-sm) var(--space-md);
-            border-bottom: 1px solid #1c1f24; flex-wrap: wrap;
+            border-bottom: 1px solid var(--widget-divider); flex-wrap: wrap;
           }
           .watchlist-edit-dialog__tab {
             padding: var(--space-xs) var(--space-sm);
@@ -311,7 +311,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
           }
           .watchlist-edit-dialog__tab:hover { color: var(--text-secondary); }
           .watchlist-edit-dialog__tab.active {
-            background: rgba(255, 255, 255, 0.08);
+            background: var(--bg-control-active);
             border-color: var(--text-secondary); color: var(--text-primary);
           }
 
@@ -326,13 +326,13 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
             transition: background 0.1s ease;
           }
           .watchlist-edit-dialog__coin-item:hover,
-          .watchlist-edit-dialog__coin-item.selected { background: rgba(255, 255, 255, 0.06); }
+          .watchlist-edit-dialog__coin-item.selected { background: var(--bg-control); }
 
           .watchlist-edit-dialog__coin-logo-container { width: 24px; height: 24px; flex-shrink: 0; }
           .watchlist-edit-dialog__coin-logo { width: 24px; height: 24px; border-radius: 50%; }
           .watchlist-edit-dialog__coin-logo-fallback {
             width: 24px; height: 24px; border-radius: 50%;
-            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            background: linear-gradient(135deg, var(--bg-control-hover), var(--bg-control));
             display: flex; align-items: center; justify-content: center;
             font-size: 12px; font-weight: 600; color: var(--text-secondary);
           }
@@ -349,7 +349,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
           }
           .watchlist-edit-dialog__coin-tag {
             font-size: 10px; color: var(--text-tertiary);
-            border: 1px solid #1c1f24; border-radius: 4px;
+            border: var(--widget-border); border-radius: 4px;
             padding: 1px 6px; text-transform: uppercase;
           }
           .watchlist-edit-dialog__empty {

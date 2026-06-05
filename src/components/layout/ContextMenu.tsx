@@ -71,6 +71,13 @@ export const ContextMenu = (props: ContextMenuProps) => {
     }
   });
 
+  createEffect(() => {
+    const itemCount = props.items.length;
+    if (!props.isOpen) return;
+    if (itemCount === 0) return;
+    requestAnimationFrame(updateActualSize);
+  });
+
   // 渲染后获取实际尺寸并微调位置
   const updateActualSize = () => {
     if (contentRef) {

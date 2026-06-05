@@ -205,29 +205,71 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
               const timeData = () => times()[index()];
 
               return (
-                <div class="world-clock-widget__city" classList={{ 'world-clock-widget__city--day': timeData()?.isDay }}>
+                <div
+                  class="world-clock-widget__city"
+                  classList={{ 'world-clock-widget__city--day': timeData()?.isDay }}
+                >
                   <div class="world-clock-widget__time-row">
-                    <div class="world-clock-widget__time" classList={{ 'world-clock-widget__time--day': timeData()?.isDay }}>
+                    <div
+                      class="world-clock-widget__time"
+                      classList={{ 'world-clock-widget__time--day': timeData()?.isDay }}
+                    >
                       {timeData() ? formatTime(timeData()!.hours, timeData()!.minutes) : '--:--'}
                     </div>
                     <Show
                       when={timeData()?.isDay}
                       fallback={
-                        <svg class="world-clock-widget__icon world-clock-widget__icon--night" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        <svg
+                          class="world-clock-widget__icon world-clock-widget__icon--night"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                         </svg>
                       }
                     >
-                      <svg class="world-clock-widget__icon world-clock-widget__icon--day" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="12" r="5"></circle>
-                        <rect x="11.4" y="2" width="1.2" height="3" rx="0.6"></rect>
-                        <rect x="11.4" y="19" width="1.2" height="3" rx="0.6"></rect>
-                        <rect x="4.2" y="4.2" width="1.2" height="3" rx="0.6" transform="rotate(45 4.8 5.7)"></rect>
-                        <rect x="18.6" y="16.8" width="1.2" height="3" rx="0.6" transform="rotate(45 19.2 18.3)"></rect>
-                        <rect x="2" y="11.4" width="3" height="1.2" rx="0.6"></rect>
-                        <rect x="19" y="11.4" width="3" height="1.2" rx="0.6"></rect>
-                        <rect x="4.2" y="16.8" width="1.2" height="3" rx="0.6" transform="rotate(-45 4.8 18.3)"></rect>
-                        <rect x="18.6" y="4.2" width="1.2" height="3" rx="0.6" transform="rotate(-45 19.2 5.7)"></rect>
+                      <svg
+                        class="world-clock-widget__icon world-clock-widget__icon--day"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <circle cx="12" cy="12" r="5" />
+                        <rect x="11.4" y="2" width="1.2" height="3" rx="0.6" />
+                        <rect x="11.4" y="19" width="1.2" height="3" rx="0.6" />
+                        <rect
+                          x="4.2"
+                          y="4.2"
+                          width="1.2"
+                          height="3"
+                          rx="0.6"
+                          transform="rotate(45 4.8 5.7)"
+                        />
+                        <rect
+                          x="18.6"
+                          y="16.8"
+                          width="1.2"
+                          height="3"
+                          rx="0.6"
+                          transform="rotate(45 19.2 18.3)"
+                        />
+                        <rect x="2" y="11.4" width="3" height="1.2" rx="0.6" />
+                        <rect x="19" y="11.4" width="3" height="1.2" rx="0.6" />
+                        <rect
+                          x="4.2"
+                          y="16.8"
+                          width="1.2"
+                          height="3"
+                          rx="0.6"
+                          transform="rotate(-45 4.8 18.3)"
+                        />
+                        <rect
+                          x="18.6"
+                          y="4.2"
+                          width="1.2"
+                          height="3"
+                          rx="0.6"
+                          transform="rotate(-45 19.2 5.7)"
+                        />
                       </svg>
                     </Show>
                   </div>
@@ -247,12 +289,14 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
 
       <Show when={isEditorOpen()}>
         <Portal enabled={true}>
-          <div class="world-clock-editor__overlay"
+          <div
+            class="world-clock-editor__overlay"
             onClick={closeEditor}
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           />
-          <div class="world-clock-editor"
+          <div
+            class="world-clock-editor"
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           >
@@ -260,7 +304,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
               <span class="world-clock-editor__title">编辑城市</span>
               <button class="world-clock-editor__close" onClick={closeEditor}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
             </div>
@@ -289,7 +333,8 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
                 </For>
               </div>
 
-              <div class="world-clock-editor__city-list"
+              <div
+                class="world-clock-editor__city-list"
                 onWheel={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
@@ -304,7 +349,9 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
                       }}
                     >
                       <span class="world-clock-editor__city-name">{city.name}</span>
-                      <span class="world-clock-editor__city-timezone">{formatOffset(city.offset)}</span>
+                      <span class="world-clock-editor__city-timezone">
+                        {formatOffset(city.offset)}
+                      </span>
                     </div>
                   )}
                 </For>
@@ -322,8 +369,8 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
       <style>{`
         /* Bloomberg Terminal Style */
         .world-clock-widget {
-          background: #0D0E12;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: var(--widget-bg);
+          border: var(--widget-border);
           border-radius: var(--radius-lg);
           width: 100%;
           height: 100%;
@@ -337,14 +384,14 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
           display: flex;
           align-items: center;
           padding: 6px 10px 4px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid var(--widget-divider);
         }
 
         .world-clock-widget__title {
           font-size: 9px;
           text-transform: uppercase;
           letter-spacing: 0.15em;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           font-weight: 700;
         }
 
@@ -365,7 +412,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
           top: 20%;
           height: 60%;
           width: 1px;
-          background: rgba(255, 255, 255, 0.05);
+          background: var(--widget-divider);
         }
 
         .world-clock-widget__city {
@@ -376,11 +423,11 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
           justify-content: center;
           padding: 4px 2px;
           text-align: center;
-          background: #080808;
+          background: var(--widget-bg);
         }
 
         .world-clock-widget__city--day {
-          background: rgba(10, 17, 24, 0.5);
+          background: var(--widget-header-bg);
         }
 
         .world-clock-widget__time-row {
@@ -396,13 +443,13 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         }
 
         .world-clock-widget__icon--day {
-          color: #FF9900;
+          color: var(--terminal-orange);
           filter: drop-shadow(0 0 2px rgba(255, 153, 0, 0.4));
           animation: breathe 2s ease-in-out infinite;
         }
 
         .world-clock-widget__icon--night {
-          color: #00A3FF;
+          color: var(--terminal-blue);
           filter: drop-shadow(0 0 2px rgba(0, 163, 255, 0.4));
           animation: breathe 2s ease-in-out infinite;
         }
@@ -421,13 +468,13 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         .world-clock-widget__time {
           font-size: 16px;
           font-weight: 700;
-          color: #00A3FF;
+          color: var(--terminal-blue);
           line-height: 1;
           letter-spacing: -0.5px;
         }
 
         .world-clock-widget__time--day {
-          color: #FF9900;
+          color: var(--terminal-orange);
         }
 
         .world-clock-widget__info {
@@ -439,7 +486,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         .world-clock-widget__city-name {
           font-size: 9px;
           font-weight: 600;
-          color: #FFFFFF;
+          color: var(--text-primary);
           text-transform: uppercase;
           letter-spacing: 0.3px;
           line-height: 1;
@@ -447,13 +494,13 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
 
         .world-clock-widget__offset {
           font-size: 7px;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           font-weight: 500;
         }
 
         .world-clock-widget__footer {
           height: 3px;
-          background: #FF9900;
+          background: var(--terminal-orange);
           opacity: 0.8;
         }
 
@@ -464,7 +511,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
           left: 0;
           width: 100vw;
           height: 100vh;
-          background: rgba(0, 0, 0, 0.6);
+          background: var(--bg-scrim);
           backdrop-filter: blur(4px);
           z-index: 1000;
         }
@@ -477,7 +524,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
           width: 320px;
           max-height: 480px;
           background: var(--bg-elevated);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: var(--widget-border);
           border-radius: var(--radius-lg);
           z-index: 1001;
           display: flex;
@@ -490,7 +537,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
           align-items: center;
           justify-content: space-between;
           padding: 12px 16px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          border-bottom: 1px solid var(--widget-divider);
         }
 
         .world-clock-editor__title {
@@ -514,7 +561,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         }
 
         .world-clock-editor__close:hover {
-          background: rgba(255, 255, 255, 0.08);
+          background: var(--bg-control-hover);
         }
 
         .world-clock-editor__content {
@@ -526,7 +573,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         .world-clock-editor__slots {
           width: 120px;
           padding: 8px;
-          border-right: 1px solid rgba(255, 255, 255, 0.06);
+          border-right: 1px solid var(--widget-divider);
           display: flex;
           flex-direction: column;
           gap: 4px;
@@ -543,7 +590,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         }
 
         .world-clock-editor__slot:hover {
-          background: rgba(255, 255, 255, 0.04);
+          background: var(--bg-control);
         }
 
         .world-clock-editor__slot--active {
@@ -582,7 +629,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         }
 
         .world-clock-editor__city:hover {
-          background: rgba(255, 255, 255, 0.04);
+          background: var(--bg-control);
         }
 
         .world-clock-editor__city--selected {
@@ -612,13 +659,13 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
         }
 
         .world-clock-editor__city-list::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.15);
+          background: var(--bg-control-active);
           border-radius: 2px;
         }
 
         .world-clock-editor__footer {
           padding: 10px 16px;
-          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          border-top: 1px solid var(--widget-divider);
           text-align: center;
         }
 

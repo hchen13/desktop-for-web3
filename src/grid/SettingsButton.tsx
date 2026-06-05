@@ -3,6 +3,7 @@
  */
 
 import { resetLayout } from './store';
+import { currentThemeMode, setThemeMode } from './themeStore';
 import { useContextMenu } from '../components/layout/ContextMenu';
 import './grid.css';
 
@@ -17,8 +18,25 @@ export const SettingsButton = () => {
 
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation();
-    
+
+    const theme = currentThemeMode();
+
     showContextMenu(e.clientX, e.clientY, [
+      {
+        label: `当前主题：${theme === 'light' ? '亮色' : '暗色'}`,
+        disabled: true,
+        action: () => {},
+      },
+      {
+        label: '使用亮色主题',
+        disabled: theme === 'light',
+        action: () => setThemeMode('light'),
+      },
+      {
+        label: '使用暗色主题',
+        disabled: theme === 'dark',
+        action: () => setThemeMode('dark'),
+      },
       {
         label: '重置默认布局',
         variant: 'danger',
@@ -32,11 +50,7 @@ export const SettingsButton = () => {
 
   return (
     <>
-      <button
-        class="settings-button"
-        onClick={handleClick}
-        title="设置"
-      >
+      <button class="settings-button" onClick={handleClick} title="设置">
         <SettingsIcon />
       </button>
       <ContextMenuComponent />

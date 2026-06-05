@@ -24,11 +24,12 @@
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('/design/layout/bg-dark-horse.png');
+  background-image: var(--desktop-bg-image);
   background-repeat: no-repeat;
   background-position: center;
   background-size: cover;
-  opacity: 0.82;
+  filter: var(--desktop-bg-filter);
+  opacity: var(--desktop-bg-opacity);
   z-index: 0;
 }
 
@@ -36,7 +37,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(8, 9, 13, 0.08) 0%, rgba(8, 9, 13, 0.52) 100%);
+  background: var(--desktop-bg-overlay);
   pointer-events: none;
   z-index: 0;
 }

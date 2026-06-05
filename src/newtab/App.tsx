@@ -16,6 +16,7 @@ import {
 } from '../grid/store';
 import { handleWheel } from '../grid/animationStore';
 import { getDefaultElements, getDefaultLayoutIds } from '../grid/defaultLayouts';
+import { loadThemeMode } from '../grid/themeStore';
 import { preloadIcons } from '../services/iconCache';
 import { getBuiltinIcon } from '../services/builtinIcons';
 import '../grid/grid.css';
@@ -24,6 +25,8 @@ export const App = () => {
   const [isReady, setIsReady] = createSignal(false);
 
   onMount(() => {
+    loadThemeMode();
+
     // 自动设置页面缩放比例为 90%
     const chromeApi = (window as any).chrome;
     if (chromeApi && chromeApi.tabs && chromeApi.tabs.setZoom) {

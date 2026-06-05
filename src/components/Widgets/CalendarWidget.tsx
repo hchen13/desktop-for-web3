@@ -14,15 +14,8 @@ import { Portal } from '../layout/Portal';
 import { useContextMenu } from '../layout/ContextMenu';
 import type { ContextMenuItem } from '../layout/ContextMenu';
 import { mergeMenuItems, getElementIdFromEvent } from '../../grid/contextMenuUtils';
-import type {
-  CalendarViewMode,
-  Web3Event,
-  EventsByDate,
-  eventType,
-} from './calendarTypes';
-import {
-  EVENT_TYPE_CONFIG,
-} from './calendarTypes';
+import type { CalendarViewMode, Web3Event, EventsByDate, eventType } from './calendarTypes';
+import { EVENT_TYPE_CONFIG } from './calendarTypes';
 import {
   getEventsForAdjacentMonths,
   groupEventsByDate,
@@ -168,9 +161,11 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
 
   const isToday = (day: number) => {
     const now = new Date();
-    return day === now.getDate() &&
+    return (
+      day === now.getDate() &&
       currentMonth() === now.getMonth() &&
-      currentYear() === now.getFullYear();
+      currentYear() === now.getFullYear()
+    );
   };
 
   const isSelected = (day: number) => {
@@ -211,7 +206,10 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         dateStr,
         events,
         hasEvents: events.length > 0,
-        isToday: day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear(),
+        isToday:
+          day === new Date().getDate() &&
+          month === new Date().getMonth() &&
+          year === new Date().getFullYear(),
         isSelected: selectedDate() === dateStr,
       };
     });
@@ -309,13 +307,20 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
   };
 
   // ===== 交互处理 =====
-  const handleDateClick = (day: number, event: MouseEvent, dateStr?: string, isOtherMonth?: boolean) => {
+  const handleDateClick = (
+    day: number,
+    event: MouseEvent,
+    dateStr?: string,
+    isOtherMonth?: boolean,
+  ) => {
     // 如果是拖拽操作，不处理点击
     if (isDraggingClick(event.clientX, event.clientY)) {
       return;
     }
 
-    const currentDateStr = dateStr || `${currentYear()}-${String(currentMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const currentDateStr =
+      dateStr ||
+      `${currentYear()}-${String(currentMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     // 从 eventsByDate 获取该日期的事件（支持其他月份）
     const allEvents = eventsByDate();
@@ -488,18 +493,21 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
               </span>
               <div class="calendar-header__right">
                 <Show when={!isCurrentMonthToday()}>
-                  <button class="calendar-header__btn calendar-header__btn--today" onClick={goToToday}>
+                  <button
+                    class="calendar-header__btn calendar-header__btn--today"
+                    onClick={goToToday}
+                  >
                     今日
                   </button>
                 </Show>
                 <button class="calendar-header__btn" onClick={prevMonth} aria-label="上一月">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
                   </svg>
                 </button>
                 <button class="calendar-header__btn" onClick={nextMonth} aria-label="下一月">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
                   </svg>
                 </button>
               </div>
@@ -591,10 +599,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         <Portal enabled={true}>
           <>
             {/* 点击外部关闭 overlay */}
-            <div
-              class="event-tooltip__overlay"
-              onClick={closeTooltip}
-            />
+            <div class="event-tooltip__overlay" onClick={closeTooltip} />
             {/* 悬浮事件卡片 */}
             <div
               class="event-tooltip"
@@ -662,8 +667,8 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
 
       <style>{`
         .calendar-widget {
-          background: #0a0b0d;
-          border: 1px solid #1c1f24;
+          background: var(--widget-bg);
+          border: var(--widget-border);
           border-radius: 16px;
           width: 100%;
           height: 100%;
@@ -685,7 +690,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           align-items: center;
           justify-content: space-between;
           height: 32px;
-          background: #14171a;
+          background: var(--widget-header-bg);
           padding: 0 16px;
         }
 
@@ -698,7 +703,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         .calendar-header__title {
           font-size: 11px;
           font-weight: 700;
-          color: #ffffff;
+          color: var(--text-primary);
           letter-spacing: 0;
         }
 
@@ -708,14 +713,14 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           justify-content: center;
           border: none;
           background: transparent;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           cursor: pointer;
           border-radius: 4px;
           transition: color 0.15s ease;
         }
 
         .calendar-header__btn:hover {
-          color: #ffffff;
+          color: var(--text-primary);
         }
 
         .calendar-header__btn svg {
@@ -728,30 +733,30 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           font-weight: 500;
           padding: 2px 8px;
           height: auto;
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--text-secondary);
         }
 
         .calendar-header__btn--today:hover {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-primary);
+          background: var(--bg-control-hover);
         }
 
         /* 星期标题 - 终端风格 */
         .calendar-weekdays {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
-          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          border-top: 1px solid var(--terminal-grid-line);
         }
 
         .calendar-weekday {
           font-size: 10px;
           font-weight: 700;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           text-align: center;
           padding: 4px 0;
-          border-right: 1px solid rgba(255, 255, 255, 0.12);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-          background: rgba(255, 255, 255, 0.02);
+          border-right: 1px solid var(--terminal-grid-line);
+          border-bottom: 1px solid var(--terminal-grid-line);
+          background: var(--widget-header-bg);
         }
 
         .calendar-weekday:last-child {
@@ -776,8 +781,8 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           transition: background 0.15s ease;
           min-height: 0;
           width: 100%;
-          border-right: 1px solid rgba(255, 255, 255, 0.12);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+          border-right: 1px solid var(--terminal-grid-line);
+          border-bottom: 1px solid var(--terminal-grid-line);
           box-sizing: border-box;
         }
 
@@ -790,7 +795,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         }
 
         .calendar-day:hover {
-          background: rgba(255, 255, 255, 0.04);
+          background: var(--bg-control);
         }
 
         /* 其他月份日期 - 极低透明度 */
@@ -799,22 +804,23 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         }
 
         .calendar-day--other-month .calendar-day__number {
-          color: rgba(255, 255, 255, 0.1);
+          color: var(--text-tertiary);
+          opacity: 0.34;
         }
 
         .calendar-day--other-month {
-          background: rgba(0, 0, 0, 0.15);
+          background: var(--bg-control);
         }
 
         .calendar-day__number {
           font-size: 10px;
-          color: rgba(255, 255, 255, 0.9);
+          color: var(--text-primary);
           line-height: 1;
         }
 
         /* 今日高亮 - 终端蓝 */
         .calendar-day--today {
-          background: #0095ff;
+          background: var(--terminal-blue);
         }
 
         .calendar-day--today .calendar-day__number {
@@ -823,7 +829,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         }
 
         .calendar-day--selected {
-          outline: 1px solid #0095ff;
+          outline: 1px solid var(--terminal-blue);
           outline-offset: -1px;
         }
 
@@ -834,7 +840,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           right: 2px;
           font-size: 8px;
           font-weight: 700;
-          color: #FF9900;
+          color: var(--terminal-orange);
           line-height: 1;
         }
 
@@ -871,7 +877,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           padding: 12px;
           height: 100%;
           width: 100%;
-          background: #0a0b0d;
+          background: var(--widget-bg);
         }
 
         .compact-header {
@@ -889,13 +895,13 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         .compact-header__month {
           font-size: 16px;
           font-weight: 700;
-          color: #ffffff;
+          color: var(--text-primary);
           line-height: 1.2;
         }
 
         .compact-header__weekday {
           font-size: 11px;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
         }
 
         .compact-events {
@@ -908,7 +914,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         .compact-events__title {
           font-size: 9px;
           font-weight: 700;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           text-transform: uppercase;
           letter-spacing: 0.5px;
           margin-bottom: 4px;
@@ -916,7 +922,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
 
         .compact-events__empty {
           font-size: 10px;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           text-align: center;
           padding: 12px;
         }
@@ -932,7 +938,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         }
 
         .compact-event:hover {
-          background: rgba(255, 255, 255, 0.04);
+          background: var(--bg-control);
         }
 
         .compact-event__bar {
@@ -950,7 +956,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         .compact-event__title {
           flex: 1;
           font-size: 10px;
-          color: rgba(255, 255, 255, 0.9);
+          color: var(--text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -958,7 +964,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
 
         .compact-event__time {
           font-size: 8px;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           flex-shrink: 0;
         }
 
@@ -966,13 +972,13 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         .event-tooltip {
           position: fixed;
           z-index: 1000;
-          background: #14171a;
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: var(--bg-panel);
+          border: var(--widget-border);
           border-radius: 8px;
           padding: 8px;
           width: 240px;
           max-width: 240px;
-          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+          box-shadow: var(--shadow-elevated);
           pointer-events: auto;
         }
 
@@ -990,7 +996,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           top: -6px;
           left: 50%;
           transform: translateX(-50%);
-          border-bottom: 6px solid #14171a;
+          border-bottom: 6px solid var(--bg-panel);
         }
 
         /* 卡片显示在上方时，三角在底部 */
@@ -998,7 +1004,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
           bottom: -6px;
           left: 50%;
           transform: translateX(-50%);
-          border-top: 6px solid #14171a;
+          border-top: 6px solid var(--bg-panel);
         }
 
         .event-tooltip__list {
@@ -1018,12 +1024,12 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         }
 
         .event-tooltip__list::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.15);
+          background: var(--bg-control-active);
           border-radius: 2px;
         }
 
         .event-tooltip__list::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.25);
+          background: var(--bg-control-hover);
         }
 
         .event-tooltip__item {
@@ -1040,7 +1046,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         }
 
         .event-tooltip__item:hover {
-          background: rgba(255, 255, 255, 0.04);
+          background: var(--bg-control);
         }
 
         .event-tooltip__item:not(:last-child) {
@@ -1065,7 +1071,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         .event-tooltip__title {
           font-size: 11px;
           font-weight: 500;
-          color: rgba(255, 255, 255, 0.9);
+          color: var(--text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1074,7 +1080,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
 
         .event-tooltip__time {
           font-size: 10px;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           line-height: 1;
           min-height: 10px;
         }

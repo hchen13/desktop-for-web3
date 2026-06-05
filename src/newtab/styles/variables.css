@@ -13,6 +13,10 @@
   --bg-primary: var(--bg-root);
   --bg-panel: #0d1017;
   --bg-elevated: #151925;
+  --desktop-bg-image: url('/design/layout/bg-dark-horse.png');
+  --desktop-bg-opacity: 0.82;
+  --desktop-bg-filter: none;
+  --desktop-bg-overlay: linear-gradient(180deg, rgba(8, 9, 13, 0.08) 0%, rgba(8, 9, 13, 0.52) 100%);
   --bg-control: rgba(22, 27, 38, 0.72);
   --bg-control-hover: rgba(34, 41, 55, 0.78);
   --bg-control-active: rgba(255, 255, 255, 0.10);
@@ -77,6 +81,47 @@
   --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
   --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
   --font-size-base: 11px;
+}
+
+[data-theme='light'] {
+  --bg-root: #eef2f7;
+  --bg-primary: var(--bg-root);
+  --bg-panel: rgba(255, 255, 255, 0.94);
+  --bg-elevated: #f8fafc;
+  --desktop-bg-image: url('/design/layout/bg-light-web3.png');
+  --desktop-bg-opacity: 1;
+  --desktop-bg-filter: none;
+  --desktop-bg-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(226, 232, 240, 0.18) 100%);
+  --bg-control: rgba(15, 23, 42, 0.055);
+  --bg-control-hover: rgba(15, 23, 42, 0.10);
+  --bg-control-active: rgba(37, 99, 235, 0.12);
+  --bg-scrim: rgba(15, 23, 42, 0.28);
+  --widget-bg: rgba(255, 255, 255, 0.88);
+  --widget-border: 1px solid rgba(15, 23, 42, 0.13);
+  --widget-header-bg: rgba(15, 23, 42, 0.035);
+  --widget-divider: rgba(15, 23, 42, 0.09);
+  --grid-cell-border: rgba(15, 23, 42, 0.055);
+  --terminal-bg: var(--widget-bg);
+  --terminal-header-bg: var(--widget-header-bg);
+  --terminal-blue: #2563eb;
+  --terminal-orange: #d97706;
+  --terminal-grid-line: rgba(15, 23, 42, 0.10);
+  --terminal-text-dim: rgba(15, 23, 42, 0.42);
+  --terminal-text-primary: rgba(15, 23, 42, 0.88);
+  --terminal-container-border: rgba(15, 23, 42, 0.13);
+  --text-primary: rgba(15, 23, 42, 0.92);
+  --text-secondary: rgba(51, 65, 85, 0.72);
+  --text-tertiary: rgba(71, 85, 105, 0.56);
+  --green-up: #047857;
+  --red-down: #dc2626;
+  --blue-main: #2563eb;
+  --yellow-warn: #d97706;
+  --color-brand: #2563eb;
+  --shadow-subtle: 0 6px 20px rgba(15, 23, 42, 0.12);
+  --shadow-elevated: 0 18px 44px rgba(15, 23, 42, 0.16), 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  --glass-bg: rgba(255, 255, 255, 0.64);
+  --glass-bg-hover: rgba(255, 255, 255, 0.82);
+  --glass-border: 1px solid rgba(15, 23, 42, 0.14);
 }
 
 * {

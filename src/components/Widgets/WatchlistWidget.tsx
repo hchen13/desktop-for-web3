@@ -313,8 +313,8 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
 
       <style>{`
         .watchlist-widget {
-          background: #0a0b0d;
-          border: 1px solid #1c1f24;
+          background: var(--widget-bg);
+          border: var(--widget-border);
           border-radius: var(--radius-lg);
           padding: var(--space-sm);
           display: flex;
@@ -340,7 +340,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           box-sizing: border-box;
           cursor: pointer;
         }
-        .price-item:hover { background: rgba(255, 255, 255, 0.04); }
+        .price-item:hover { background: var(--bg-control); }
         .price-item__main {
           display: flex; flex-direction: column;
           justify-content: center; gap: 0;
@@ -351,7 +351,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           padding: 2px 4px; margin: -2px -4px;
           transition: background 0.15s ease;
         }
-        .price-item__main--clickable:hover { background: rgba(255, 255, 255, 0.08); }
+        .price-item__main--clickable:hover { background: var(--bg-control-hover); }
         .price-item__symbol {
           font-size: 14px; font-weight: 600;
           color: var(--text-primary); line-height: 1.2;
@@ -394,8 +394,8 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           width: 20px; height: 20px;
           display: inline-flex; align-items: center; justify-content: center;
           border-radius: 50%;
-          background: rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.7);
+          background: var(--bg-control-active);
+          color: var(--text-secondary);
           font-size: 10px; font-weight: 700;
           font-family: var(--font-mono, monospace);
         }

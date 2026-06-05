@@ -43,7 +43,16 @@ const formatTime = (isoDate: string, currentTime: number): string => {
 
 // 图标组件 - 使用函数返回新的 JSX，避免 SolidJS 复用同一个 DOM 节点
 const RssIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
     <path d="M4 11a9 9 0 0 1 9 9" />
     <path d="M4 4a16 16 0 0 1 16 16" />
     <circle cx="5" cy="19" r="1" />
@@ -118,20 +127,29 @@ export const NewsWidget = (props: NewsWidgetProps) => {
     <div class="news-widget">
       <header class="news-widget__header">
         <div class="news-widget__header-left">
-          <span class="news-widget__icon"><RssIcon /></span>
+          <span class="news-widget__icon">
+            <RssIcon />
+          </span>
           <h2 class="news-widget__title">Web3 资讯</h2>
         </div>
         <Show
           when={state().status === 'syncing'}
           fallback={
-            <div class="news-widget__status-pill news-widget__status-pill--live" aria-label="实时更新">
-              <span class="news-widget__status-icon news-widget__status-icon--live"><LiveDot /></span>
+            <div
+              class="news-widget__status-pill news-widget__status-pill--live"
+              aria-label="实时更新"
+            >
+              <span class="news-widget__status-icon news-widget__status-icon--live">
+                <LiveDot />
+              </span>
               <span class="news-widget__status-text">LIVE</span>
             </div>
           }
         >
           <div class="news-widget__status-pill" aria-label="同步中">
-            <span class="news-widget__status-icon"><SyncingIndicator /></span>
+            <span class="news-widget__status-icon">
+              <SyncingIndicator />
+            </span>
             <span class="news-widget__status-text">SYNCING</span>
           </div>
         </Show>
@@ -160,10 +178,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
                 const tagConfig = getTagConfig(item.combinedTag);
                 return (
                   <>
-                    <div
-                      class="news-item"
-                      onClick={() => handleItemClick(item.link)}
-                    >
+                    <div class="news-item" onClick={() => handleItemClick(item.link)}>
                       <div class="news-item__meta">
                         <span class="news-item__category">{tagConfig.label}</span>
                       </div>
@@ -206,8 +221,8 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           justify-content: space-between;
           align-items: center;
           padding: 8px 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(0, 0, 0, 0.4);
+          border-bottom: 1px solid var(--widget-divider);
+          background: var(--widget-header-bg);
           flex-shrink: 0;
           min-height: 32px;
         }
@@ -219,7 +234,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         }
 
         .news-widget__icon {
-          color: #FF9900;
+          color: var(--terminal-orange);
           display: flex;
           align-items: center;
         }
@@ -232,7 +247,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-widget__title {
           font-size: 12px;
           font-weight: 700;
-          color: #FFFFFF;
+          color: var(--text-primary);
           letter-spacing: 0.3px;
           margin: 0;
         }
@@ -243,8 +258,8 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           align-items: center;
           gap: 4px;
           padding: 2px 8px;
-          background: rgba(255, 153, 0, 0.1);
-          border: 1px solid rgba(255, 153, 0, 0.2);
+          background: rgba(245, 158, 11, 0.10);
+          border: 1px solid rgba(245, 158, 11, 0.22);
           border-radius: 999px;
           min-width: 68px;
           justify-content: center;
@@ -252,12 +267,12 @@ export const NewsWidget = (props: NewsWidgetProps) => {
 
         /* LIVE 状态 - 绿色呼吸闪烁 */
         .news-widget__status-pill--live {
-          background: rgba(0, 255, 136, 0.1);
-          border-color: rgba(0, 255, 136, 0.2);
+          background: rgba(0, 192, 135, 0.10);
+          border-color: rgba(0, 192, 135, 0.22);
         }
 
         .news-widget__status-icon {
-          color: #FF9900;
+          color: var(--terminal-orange);
           display: flex;
           width: 12px;
           height: 12px;
@@ -265,18 +280,18 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         }
 
         .news-widget__status-icon--live {
-          color: #00FF88;
+          color: var(--green-up);
         }
 
         .news-widget__status-text {
           font-size: 9px;
           font-weight: 700;
-          color: #FF9900;
+          color: var(--terminal-orange);
           letter-spacing: 0.05em;
         }
 
         .news-widget__status-pill--live .news-widget__status-text {
-          color: #00FF88;
+          color: var(--green-up);
         }
 
         .news-widget__sync-spin {
@@ -332,7 +347,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
 
         /* 悬停效果: 背景提亮 + 左侧橙色竖线 */
         .news-item:hover {
-          background: rgba(255, 255, 255, 0.05);
+          background: var(--bg-control);
         }
 
         .news-item:hover::before {
@@ -342,7 +357,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           top: 0;
           bottom: 0;
           width: 2px;
-          background-color: #FF9900;
+          background-color: var(--terminal-orange);
         }
 
         .news-item__meta {
@@ -357,8 +372,8 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           align-items: center;
           height: 14px;
           padding: 0 8px;
-          background: #FF9900;
-          color: #000000;
+          background: var(--terminal-orange);
+          color: #ffffff;
           font-size: 8px;
           font-weight: 800;
           letter-spacing: 0.5px;
@@ -372,7 +387,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           font-size: 12px;
           font-weight: 700;
           line-height: 1.3;
-          color: #FFFFFF;
+          color: var(--text-primary);
           margin: 0 0 4px 0;
           display: -webkit-box;
           -webkit-line-clamp: 2;
@@ -391,7 +406,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-item__source {
           font-size: 9px;
           font-weight: 500;
-          color: rgba(255, 255, 255, 0.4);
+          color: var(--text-tertiary);
           text-transform: uppercase;
           letter-spacing: 0.2px;
         }
@@ -400,14 +415,14 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-item__time {
           font-size: 11px;
           font-weight: 500;
-          color: rgba(255, 255, 255, 0.5);
+          color: var(--text-secondary);
           letter-spacing: 0.2px;
         }
 
         /* 分割线 - 极细 */
         .news-item__divider {
           height: 1px;
-          background: rgba(255, 255, 255, 0.05);
+          background: var(--widget-divider);
           margin: 0 12px;
         }
 
@@ -418,7 +433,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
           pointer-events: none;
           background:
             linear-gradient(to bottom, rgba(255, 255, 255, 0.03), transparent 60px),
-            linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 70px);
+            linear-gradient(to top, var(--widget-bg), transparent 70px);
           height: 100%;
           width: 100%;
         }
@@ -439,7 +454,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-item-skeleton__meta {
           width: 40px;
           height: 14px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 75%);
+          background: linear-gradient(90deg, var(--bg-control) 25%, var(--bg-control-hover) 50%, var(--bg-control) 75%);
           background-size: 200% 100%;
           border-radius: 999px;
           animation: shimmer 1.5s infinite;
@@ -448,7 +463,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-item-skeleton__title {
           width: 100%;
           height: 30px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 75%);
+          background: linear-gradient(90deg, var(--bg-control) 25%, var(--bg-control-hover) 50%, var(--bg-control) 75%);
           background-size: 200% 100%;
           border-radius: 4px;
           animation: shimmer 1.5s infinite;
@@ -458,7 +473,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
         .news-item-skeleton__source {
           width: 60px;
           height: 10px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.06) 75%);
+          background: linear-gradient(90deg, var(--bg-control) 25%, var(--bg-control-hover) 50%, var(--bg-control) 75%);
           background-size: 200% 100%;
           border-radius: 4px;
           animation: shimmer 1.5s infinite;
