@@ -93,6 +93,7 @@ export interface Widget extends GridElement {
     | 'chain-monitor'
     | 'world-clock'
     | 'econ-map'
+    | 'btc-realized-price'
     | 'rate-monitor'
     | 'stable-peg'
     | 'stable-yield'

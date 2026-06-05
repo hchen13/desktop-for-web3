@@ -8,6 +8,7 @@ export { WatchlistWidget } from './WatchlistWidget';
 export { ChainMonitorWidget } from './ChainMonitorWidget';
 export { EconMapWidget } from './EconMap2Widget';
 export { RateMonitorWidget } from './RateMonitorWidget';
+export { BtcRealizedPriceWidget } from './BtcRealizedPriceWidget';
 export { StablePegWidget } from './StablePegWidget';
 export { StableYieldWidget } from './StableYieldWidget';
 export { RWATreasuriesWidget } from './RWATreasuriesWidget';

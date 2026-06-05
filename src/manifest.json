@@ -32,6 +32,7 @@
     "https://www.binance.com/*",
     "https://api.binance.us/*",
     "https://www.binance.us/*",
+    "https://api.bitcoin-data.com/*",
     "wss://stream.binance.com:9443/*",
     "wss://stream.binance.us:9443/*",
     "https://www.imf.org/*",

@@ -1,0 +1,137 @@
+.btc-realized {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 7px 7px 5px;
+  border: var(--widget-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent 36%), var(--widget-bg);
+}
+
+.btc-realized::before {
+  content: '';
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 30px;
+  height: 1px;
+  background: var(--terminal-orange);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.btc-realized__header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 5px;
+  min-height: 26px;
+}
+
+.btc-realized__asset {
+  color: var(--terminal-orange);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.btc-realized__label {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.btc-realized__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 13px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(0, 192, 135, 0.12);
+  color: var(--green-up);
+  font-size: 7px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.btc-realized__status--syncing {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--terminal-orange);
+}
+
+.btc-realized__status--cached {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--terminal-blue);
+}
+
+.btc-realized__status--error {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--red-down);
+}
+
+.btc-realized__empty {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.btc-realized__value {
+  position: relative;
+  z-index: 1;
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.btc-realized__change {
+  position: relative;
+  z-index: 1;
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.btc-realized__change--up {
+  color: var(--green-up);
+}
+
+.btc-realized__change--down {
+  color: var(--red-down);
+}
+
+.btc-realized__change--flat {
+  color: var(--text-tertiary);
+}
+
+.btc-realized__footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: auto;
+  color: var(--text-tertiary);
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1;
+}

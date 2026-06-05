@@ -78,6 +78,11 @@ const lazyEconMap = lazy(() =>
 const lazyRateMonitor = lazy(() =>
   import('../components/Widgets/RateMonitorWidget').then((m) => ({ default: m.RateMonitorWidget })),
 );
+const lazyBtcRealizedPrice = lazy(() =>
+  import('../components/Widgets/BtcRealizedPriceWidget').then((m) => ({
+    default: m.BtcRealizedPriceWidget,
+  })),
+);
 const lazyStablePeg = lazy(() =>
   import('../components/Widgets/StablePegWidget').then((m) => ({ default: m.StablePegWidget })),
 );
@@ -113,6 +118,8 @@ const getLazyComponent = (component: string) => {
       return lazyEconMap;
     case 'rate-monitor':
       return lazyRateMonitor;
+    case 'btc-realized-price':
+      return lazyBtcRealizedPrice;
     case 'stable-peg':
       return lazyStablePeg;
     case 'stable-yield':
@@ -454,6 +461,8 @@ export const GridContainer = (props: GridContainerProps = {}) => {
       case 'econ-map':
         return GRID_SIZES.ECON_MAP;
       case 'rate-monitor':
+        return GRID_SIZES.ICON;
+      case 'btc-realized-price':
         return GRID_SIZES.ICON;
       case 'stable-peg':
         return GRID_SIZES.STANDARD_WIDGET;

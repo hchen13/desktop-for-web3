@@ -14,6 +14,7 @@ export type WidgetType =
   | 'chain-monitor'
   | 'world-clock'
   | 'econ-map'
+  | 'btc-realized-price'
   | 'rate-monitor'
   | 'stable-peg'
   | 'stable-yield'
@@ -62,6 +63,12 @@ const WIDGET_OPTIONS: WidgetOption[] = [
     name: '经济地图',
     description: '宏观经济数据可视化（本地数据源）',
     size: GRID_SIZES.ECON_MAP,
+  },
+  {
+    id: 'btc-realized-price',
+    name: 'BTC Realized',
+    description: 'BTC 实现价格与 24h 变化',
+    size: GRID_SIZES.ICON,
   },
   {
     id: 'rate-monitor',
