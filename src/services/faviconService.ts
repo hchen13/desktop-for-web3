@@ -4,8 +4,8 @@
  * 支持内置图标映射
  *
  * 优先级策略：
- * 1. Chrome 原生 API（扩展环境最佳）
- * 2. Google Favicon 服务（自动添加背景，深色主题友好）
+ * 1. Google Favicon 服务（自动添加背景，深色主题友好）
+ * 2. 站点声明的 favicon
  * 3. 其他第三方服务按尺寸和宽高比评分
  */
 
@@ -16,8 +16,6 @@ interface FaviconOptions {
   size?: number;
 }
 
-// 目标图标尺寸（适应 40px 显示，稍大一点保持清晰）
-const TARGET_SIZE = 64;
 const MIN_ACCEPTABLE_SIZE = 32;
 const MAX_ACCEPTABLE_SIZE = 256;
 
@@ -208,7 +206,7 @@ async function parseFaviconFromHtml(url: string): Promise<string[]> {
 
 /**
  * 获取图标的各个服务源
- * 优先级：Chrome 原生 > Google（自动加白底）> 其他第三方
+ * 优先级：Google（自动加白底）> 站点 favicon > 其他第三方
  */
 function getIconSources(url: string): string[] {
   try {
@@ -218,26 +216,19 @@ function getIconSources(url: string): string[] {
 
     const sources: string[] = [];
 
-    // 1. Chrome 原生 Favicon 服务 (MV3 推荐方式) - 仅在扩展环境有效
-    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-      sources.push(
-        `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(url)}&size=${TARGET_SIZE}`,
-      );
-    }
-
-    // 2. Google Favicon 服务 - 自动添加白色背景，深色主题最友好
+    // 1. Google Favicon 服务 - 自动添加白色背景，深色主题最友好
     sources.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`);
     // Google 新版 API（更高质量）
     sources.push(
       `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin)}&size=128`,
     );
 
-    // 3. 其他第三方服务
+    // 2. 其他第三方服务
     sources.push(`https://icons.duckduckgo.com/ip3/${domain}.ico`);
     sources.push(`https://favicone.com/${domain}?s=128`);
     sources.push(`https://icon.horse/icon/${domain}`);
 
-    // 4. 站点根目录（放最后，因为很多站点会 403 或返回低质量图标）
+    // 3. 站点根目录（放最后，因为很多站点会 403 或返回低质量图标）
     sources.push(`${origin}/favicon.ico`);
 
     // 子域名父级备选

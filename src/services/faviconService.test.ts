@@ -72,12 +72,10 @@ describe('SOURCE_PRIORITY consistency', () => {
     }
   });
 
-  it('Chrome native is highest priority', () => {
+  it('keeps Chrome native below Google favicon services', () => {
     const chromeScore = FAVICON_PRIORITY['chrome-extension://'];
-    for (const [key, score] of Object.entries(FAVICON_PRIORITY)) {
-      if (key === 'chrome-extension://') continue;
-      expect(score).toBeLessThanOrEqual(chromeScore);
-    }
+    expect(chromeScore).toBeLessThan(FAVICON_PRIORITY['google.com/s2/favicons']);
+    expect(chromeScore).toBeLessThan(FAVICON_PRIORITY['t3.gstatic.com/faviconV2']);
   });
 });
 
@@ -137,6 +135,34 @@ describe('iconCache.getCachedIconUrl', () => {
     );
     expect(getCachedIconUrl('https://www.youtube.com')).toBe(
       'https://www.google.com/s2/favicons?domain=youtube.com&sz=128',
+    );
+  });
+
+  it('uses stable builtin icons for chain desktop domains', () => {
+    expect(getCachedIconUrl('https://metamask.io')).toBe(
+      'https://www.google.com/s2/favicons?domain=metamask.io&sz=128',
+    );
+    expect(getCachedIconUrl('https://phantom.app')).toBe(
+      'https://www.google.com/s2/favicons?domain=phantom.app&sz=128',
+    );
+    expect(getCachedIconUrl('https://1inch.com')).toBe('https://1inch.com/favicon/favicon.ico');
+    expect(getCachedIconUrl('https://polygonscan.com')).toBe(
+      'https://www.google.com/s2/favicons?domain=polygonscan.com&sz=128',
+    );
+    expect(getCachedIconUrl('https://coinmarketcal.com')).toBe(
+      'https://www.google.com/s2/favicons?domain=coinmarketcal.com&sz=128',
+    );
+    expect(getCachedIconUrl('https://lighter.xyz')).toBe(
+      'https://www.google.com/s2/favicons?domain=lighter.xyz&sz=128',
+    );
+    expect(getCachedIconUrl('https://www.maple.finance')).toBe(
+      'https://www.google.com/s2/favicons?domain=maple.finance&sz=128',
+    );
+    expect(getCachedIconUrl('https://paxos.com')).toBe(
+      'https://www.google.com/s2/favicons?domain=paxos.com&sz=128',
+    );
+    expect(getCachedIconUrl('https://www.circle.com')).toBe(
+      'https://www.google.com/s2/favicons?domain=circle.com&sz=128',
     );
   });
 
@@ -227,6 +253,13 @@ describe('iconCache.isLikelyFallbackIcon', () => {
     );
     expect(
       isLikelyFallbackIcon('https://www.google.com/s2/favicons?domain=example.com&sz=64', 16, 16),
+    ).toBe(true);
+    expect(
+      isLikelyFallbackIcon(
+        'chrome-extension://abcdefghijklmnopqrstuvwxyabcdefg/_favicon/?pageUrl=https%3A%2F%2Fphantom.app&size=64',
+        64,
+        64,
+      ),
     ).toBe(true);
   });
 

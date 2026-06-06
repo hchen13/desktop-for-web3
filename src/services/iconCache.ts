@@ -16,8 +16,8 @@ import { getSourcePriorityScore } from './faviconConfig';
 export const [isStorageLoaded, setStorageLoaded] = createSignal(false);
 
 // 缓存版本号 - 修改此值强制刷新缓存
-// v7: 允许失败的内置图标被动态检测结果覆盖
-const STORAGE_KEY = 'icon_cache_v7';
+// v8: 清理可能被 Chrome _favicon 灰色地球污染的 v7 缓存
+const STORAGE_KEY = 'icon_cache_v8';
 
 // 缓存过期策略
 const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7天：完全过期，删除条目
@@ -140,20 +140,15 @@ function calculateAspectScore(width: number, height: number): number {
 export function isLikelyFallbackIcon(url: string, width: number, height: number): boolean {
   const normalizedUrl = url.toLowerCase();
 
+  if (isChromeFaviconUrl(normalizedUrl)) {
+    return true;
+  }
+
   if (normalizedUrl.includes('icons.duckduckgo.com') && width === 48 && height === 48) {
     return true;
   }
 
   if (normalizedUrl.includes('icon.horse') && width === 512 && height === 512) {
-    return true;
-  }
-
-  if (
-    normalizedUrl.startsWith('chrome-extension://') &&
-    normalizedUrl.includes('/_favicon/') &&
-    width <= 16 &&
-    height <= 16
-  ) {
     return true;
   }
 
@@ -169,8 +164,14 @@ export function isLikelyFallbackIcon(url: string, width: number, height: number)
   return false;
 }
 
+function isChromeFaviconUrl(url: string): boolean {
+  const normalizedUrl = url.toLowerCase();
+  return normalizedUrl.startsWith('chrome-extension://') && normalizedUrl.includes('/_favicon/');
+}
+
 function isGenericIconService(url: string): boolean {
   return (
+    isChromeFaviconUrl(url) ||
     url.includes('google.com/s2/favicons') ||
     url.includes('gstatic.com/faviconV2') ||
     url.includes('icons.duckduckgo.com') ||
@@ -341,23 +342,16 @@ function getIconSources(siteUrl: string): string[] {
     const isSub = isSubdomain(domain);
     const parentDomain = getParentDomain(domain);
 
-    // 1. Chrome 原生 API（扩展环境最佳）
-    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-      sources.push(
-        `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(siteUrl)}&size=64`,
-      );
-    }
-
-    // 2. 直接访问子域名的 favicon.ico（对内部网站至关重要）
+    // 1. 直接访问子域名的 favicon.ico（对内部网站至关重要）
     sources.push(`${origin}/favicon.ico`);
 
-    // 3. Google Favicon（使用原始域名）
+    // 2. Google Favicon（使用原始域名）
     sources.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
     sources.push(
       `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(origin)}&size=64`,
     );
 
-    // 4. icon.horse - 子域名使用原域名，非子域名尝试 www 版本
+    // 3. icon.horse - 子域名使用原域名，非子域名尝试 www 版本
     if (isSub) {
       // 子域名：只用原域名，不加 www
       sources.push(`https://icon.horse/icon/${domain}`);
@@ -370,10 +364,10 @@ function getIconSources(siteUrl: string): string[] {
       }
     }
 
-    // 5. DuckDuckGo（使用原始域名）
+    // 4. DuckDuckGo（使用原始域名）
     sources.push(`https://icons.duckduckgo.com/ip3/${domain}.ico`);
 
-    // 6. 如果是子域名，也尝试父域名作为降级
+    // 5. 如果是子域名，也尝试父域名作为降级
     if (isSub && parentDomain) {
       sources.push(`https://icon.horse/icon/${parentDomain}`);
       sources.push(`https://icon.horse/icon/www.${parentDomain}`);

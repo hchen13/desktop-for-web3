@@ -70,6 +70,8 @@ const BUILTIN_ICONS: IconMapping = {
   'app.balancer.fi': 'https://balancer.fi/favicon.ico',
   '1inch.io': 'https://1inch.com/favicon/favicon.ico',
   'app.1inch.io': 'https://1inch.com/favicon/favicon.ico',
+  '1inch.com': 'https://1inch.com/favicon/favicon.ico',
+  'www.1inch.com': 'https://1inch.com/favicon/favicon.ico',
 
   // Perp DEX - 永续合约 DEX
   'dydx.exchange': 'https://dydx.exchange/favicon.ico',
@@ -90,8 +92,19 @@ const BUILTIN_ICONS: IconMapping = {
   'deepseek.com': 'https://deepseek.com/favicon.ico',
 
   // 链上数据
+  'metamask.io': 'https://www.google.com/s2/favicons?domain=metamask.io&sz=128',
+  'www.metamask.io': 'https://www.google.com/s2/favicons?domain=metamask.io&sz=128',
+  'phantom.app': 'https://www.google.com/s2/favicons?domain=phantom.app&sz=128',
+  'www.phantom.app': 'https://www.google.com/s2/favicons?domain=phantom.app&sz=128',
+  'bnbchain.org': 'https://www.google.com/s2/favicons?domain=bnbchain.org&sz=128',
+  'www.bnbchain.org': 'https://www.google.com/s2/favicons?domain=bnbchain.org&sz=128',
+  'web3.bitget.com': 'https://www.google.com/s2/favicons?domain=web3.bitget.com&sz=128',
+  'onekey.so': 'https://www.google.com/s2/favicons?domain=onekey.so&sz=128',
+  'www.onekey.so': 'https://www.google.com/s2/favicons?domain=onekey.so&sz=128',
   'etherscan.io': 'https://etherscan.io/images/brandassets/etherscan-logo-circle.png',
   'www.etherscan.io': 'https://etherscan.io/images/brandassets/etherscan-logo-circle.png',
+  'polygonscan.com': 'https://www.google.com/s2/favicons?domain=polygonscan.com&sz=128',
+  'www.polygonscan.com': 'https://www.google.com/s2/favicons?domain=polygonscan.com&sz=128',
   'solscan.io': 'https://www.google.com/s2/favicons?domain=solscan.io&sz=128',
   'www.solscan.io': 'https://www.google.com/s2/favicons?domain=solscan.io&sz=128',
   'dune.com': 'https://dune.com/favicon.ico',
@@ -113,6 +126,10 @@ const BUILTIN_ICONS: IconMapping = {
   'www.dexscreener.com': 'https://dexscreener.com/favicon.ico',
   'debank.com': 'https://www.google.com/s2/favicons?domain=debank.com&sz=128',
   'www.debank.com': 'https://www.google.com/s2/favicons?domain=debank.com&sz=128',
+  'tokenomist.ai': 'https://www.google.com/s2/favicons?domain=tokenomist.ai&sz=128',
+  'www.tokenomist.ai': 'https://www.google.com/s2/favicons?domain=tokenomist.ai&sz=128',
+  'coinmarketcal.com': 'https://www.google.com/s2/favicons?domain=coinmarketcal.com&sz=128',
+  'www.coinmarketcal.com': 'https://www.google.com/s2/favicons?domain=coinmarketcal.com&sz=128',
 
   // 更多链上项目
   'ondo.finance': 'https://s2.coinmarketcap.com/static/img/coins/64x64/21156.png',
@@ -123,12 +140,22 @@ const BUILTIN_ICONS: IconMapping = {
   'www.l2beat.com': 'https://www.google.com/s2/favicons?sz=128&domain=l2beat.com',
   'nansen.ai': 'https://www.google.com/s2/favicons?domain=nansen.ai&sz=128',
   'www.nansen.ai': 'https://www.google.com/s2/favicons?domain=nansen.ai&sz=128',
+  'hyperliquid.xyz': 'https://www.google.com/s2/favicons?domain=hyperliquid.xyz&sz=128',
+  'www.hyperliquid.xyz': 'https://www.google.com/s2/favicons?domain=hyperliquid.xyz&sz=128',
+  'lighter.xyz': 'https://www.google.com/s2/favicons?domain=lighter.xyz&sz=128',
+  'www.lighter.xyz': 'https://www.google.com/s2/favicons?domain=lighter.xyz&sz=128',
   'edgex.exchange': 'https://www.edgex.exchange/favicon.ico',
   'www.edgex.exchange': 'https://www.edgex.exchange/favicon.ico',
   'gains.trade': 'https://www.google.com/s2/favicons?domain=gains.trade&sz=128',
   'www.gains.trade': 'https://www.google.com/s2/favicons?domain=gains.trade&sz=128',
   'aevo.xyz': 'https://www.google.com/s2/favicons?domain=aevo.xyz&sz=128',
   'www.aevo.xyz': 'https://www.google.com/s2/favicons?domain=aevo.xyz&sz=128',
+  'maple.finance': 'https://www.google.com/s2/favicons?domain=maple.finance&sz=128',
+  'www.maple.finance': 'https://www.google.com/s2/favicons?domain=maple.finance&sz=128',
+  'paxos.com': 'https://www.google.com/s2/favicons?domain=paxos.com&sz=128',
+  'www.paxos.com': 'https://www.google.com/s2/favicons?domain=paxos.com&sz=128',
+  'circle.com': 'https://www.google.com/s2/favicons?domain=circle.com&sz=128',
+  'www.circle.com': 'https://www.google.com/s2/favicons?domain=circle.com&sz=128',
 
   // L2 网络
   'arbitrum.io': 'https://arbitrum.io/favicon.ico',
