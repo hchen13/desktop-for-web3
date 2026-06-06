@@ -299,7 +299,6 @@
   position: absolute;
   width: var(--grid-unit);
   height: var(--grid-unit);
-  border: 1px dashed var(--grid-cell-border);
   border-radius: var(--radius-sm);
   box-sizing: border-box;
 }
