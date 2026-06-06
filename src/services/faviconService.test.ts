@@ -139,6 +139,11 @@ describe('iconCache.getCachedIconUrl', () => {
   });
 
   it('uses stable builtin icons for chain desktop domains', () => {
+    expect(
+      getCachedIconUrl(
+        'https://monitor-asdx.kayaquant.com/d/p75-lS5nz3/etfe680bb-e8a788?orgId=1&refresh=1m',
+      ),
+    ).toBe('https://monitor-asdx.kayaquant.com/public/img/fav32.png');
     expect(getCachedIconUrl('https://metamask.io')).toBe(
       'https://www.google.com/s2/favicons?domain=metamask.io&sz=128',
     );
@@ -174,6 +179,19 @@ describe('iconCache.getCachedIconUrl', () => {
     });
 
     expect(getCachedIconUrl('https://claude.ai')).toBe('https://claude.ai/generated-icon.png');
+  });
+
+  it('ignores low-score generic cached icons', () => {
+    memoryCache.set('monitor-asdx.kayaquant.com', {
+      url: 'https://icon.horse/icon/monitor-asdx.kayaquant.com',
+      score: 55,
+      timestamp: Date.now(),
+    });
+
+    expect(
+      getCachedIconUrl('https://monitor-asdx.kayaquant.com/d/p75-lS5nz3/etfe680bb-e8a788'),
+    ).toBe('https://monitor-asdx.kayaquant.com/public/img/fav32.png');
+    expect(memoryCache.has('monitor-asdx.kayaquant.com')).toBe(false);
   });
 
   it('can bypass a failed builtin icon and cache a discovered source', async () => {
@@ -224,13 +242,15 @@ describe('iconCache.getCachedIconUrl', () => {
     });
 
     expect(getIconLoadState('https://placeholder.example')).toBe('loading');
-    expect(getCachedIconUrl('https://placeholder.example')).toContain('icon.horse');
+    expect(getCachedIconUrl('https://placeholder.example')).toBe(
+      'https://www.google.com/s2/favicons?domain=placeholder.example&sz=128',
+    );
     expect(memoryCache.has('placeholder.example')).toBe(false);
   });
 
-  it('returns icon.horse fallback for a hostname with no cache', () => {
+  it('returns Google favicon fallback for a hostname with no cache', () => {
     const url = getCachedIconUrl('https://uniqueexample-xyz123.com');
-    expect(url).toContain('icon.horse');
+    expect(url).toBe('https://www.google.com/s2/favicons?domain=uniqueexample-xyz123.com&sz=128');
   });
 
   it('returns "" for empty input', () => {

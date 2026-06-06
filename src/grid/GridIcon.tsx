@@ -20,14 +20,13 @@ interface GridIconProps {
   name: string;
 }
 
+const IMAGE_LOAD_TIMEOUT_MS = 8000;
+
 export const GridIcon = (props: GridIconProps) => {
   // 从缓存获取初始 URL
   const initialUrl = getCachedIconUrl(props.url);
   const [iconUrl, setIconUrl] = createSignal(initialUrl);
 
-  // 全局加载状态
-  const globalState = getIconLoadState(props.url);
-  const [isLoading, setIsLoading] = createSignal(globalState !== 'loaded');
   const [imageError, setImageError] = createSignal(false);
 
   // 本地状态：追踪实际图片元素是否已加载完成
@@ -36,7 +35,6 @@ export const GridIcon = (props: GridIconProps) => {
 
   const requestBestIcon = (failedSrc?: string) => {
     const requestId = ++detectionRequestId;
-    setIsLoading(true);
     setImageError(false);
 
     detectBestIcon(props.url, {
@@ -51,19 +49,16 @@ export const GridIcon = (props: GridIconProps) => {
             setIconUrl(bestIconUrl);
           }
           setIsImgLoaded(false);
-          setIsLoading(true);
           setImageError(false);
           return;
         }
 
         if (!isImgLoaded()) {
-          setIsLoading(false);
           setImageError(true);
         }
       })
       .catch(() => {
         if (requestId !== detectionRequestId || isImgLoaded()) return;
-        setIsLoading(false);
         setImageError(true);
       });
   };
@@ -77,12 +72,24 @@ export const GridIcon = (props: GridIconProps) => {
       detectionRequestId++;
       setIconUrl(newIconUrl);
       setIsImgLoaded(false); // 新图片需要重新加载
-      setIsLoading(true);
       setImageError(false);
     });
 
     // 清理回调
     onCleanup(unsubscribe);
+  });
+
+  createEffect(() => {
+    const src = iconUrl();
+    if (!src || isImgLoaded() || imageError()) return;
+
+    const timeout = setTimeout(() => {
+      if (iconUrl() !== src || isImgLoaded() || imageError()) return;
+      setIsImgLoaded(false);
+      requestBestIcon(src);
+    }, IMAGE_LOAD_TIMEOUT_MS);
+
+    onCleanup(() => clearTimeout(timeout));
   });
 
   // 监听 URL 变化，触发图标检测
@@ -100,7 +107,6 @@ export const GridIcon = (props: GridIconProps) => {
     if (url === prevUrl && !storageReady) return prevUrl;
 
     const state = getIconLoadState(url);
-    setIsLoading(state !== 'loaded');
     setIsImgLoaded(false);
     setImageError(false);
 
@@ -120,10 +126,6 @@ export const GridIcon = (props: GridIconProps) => {
       return;
     }
 
-    if (isLoading() || imageError()) {
-      return;
-    }
-
     window.open(props.url, '_blank');
   };
 
@@ -133,13 +135,11 @@ export const GridIcon = (props: GridIconProps) => {
 
     if (isLikelyFallbackIcon(currentSrc, img.naturalWidth, img.naturalHeight)) {
       setIsImgLoaded(false);
-      setIsLoading(true);
       setImageError(false);
       requestBestIcon(currentSrc);
       return;
     }
 
-    setIsLoading(false);
     setIsImgLoaded(true);
     setImageError(false);
   };

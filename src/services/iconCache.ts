@@ -46,6 +46,12 @@ function isUsableCacheEntry(entry: IconCacheEntry | undefined): entry is IconCac
   return Boolean(entry && entry.score >= MIN_CACHE_SCORE);
 }
 
+function isReliableCacheEntry(entry: IconCacheEntry | undefined): entry is IconCacheEntry {
+  return Boolean(
+    entry && isUsableCacheEntry(entry) && (!isGenericIconService(entry.url) || entry.score >= 110),
+  );
+}
+
 async function loadStorageCache(): Promise<void> {
   try {
     if (typeof chrome !== 'undefined' && chrome.storage?.local) {
@@ -54,7 +60,7 @@ async function loadStorageCache(): Promise<void> {
       if (stored) {
         const now = Date.now();
         Object.entries(stored).forEach(([domain, entry]) => {
-          if (now - entry.timestamp < CACHE_MAX_AGE && isUsableCacheEntry(entry)) {
+          if (now - entry.timestamp < CACHE_MAX_AGE && isReliableCacheEntry(entry)) {
             memoryCache.set(domain, entry);
           }
         });
@@ -65,7 +71,7 @@ async function loadStorageCache(): Promise<void> {
         const parsed = JSON.parse(stored) as Record<string, IconCacheEntry>;
         const now = Date.now();
         Object.entries(parsed).forEach(([domain, entry]) => {
-          if (now - entry.timestamp < CACHE_MAX_AGE && isUsableCacheEntry(entry)) {
+          if (now - entry.timestamp < CACHE_MAX_AGE && isReliableCacheEntry(entry)) {
             memoryCache.set(domain, entry);
           }
         });
@@ -183,6 +189,12 @@ function isGenericIconService(url: string): boolean {
 function isSkippedIconUrl(sourceUrl: string, skipUrl?: string): boolean {
   if (!skipUrl) return false;
   return sourceUrl === skipUrl;
+}
+
+function isCacheableIconResult(result: { url: string; score: number }): boolean {
+  return (
+    result.score >= MIN_CACHE_SCORE && (!isGenericIconService(result.url) || result.score >= 110)
+  );
 }
 
 function checkImageSource(
@@ -410,14 +422,13 @@ export function getCachedIconUrl(url: string): string {
   if (!domain) return '';
 
   const cached = memoryCache.get(domain);
-  if (isUsableCacheEntry(cached)) return cached.url;
+  if (isReliableCacheEntry(cached)) return cached.url;
   if (cached) memoryCache.delete(domain);
 
   const builtin = getBuiltinIcon(url);
   if (builtin) return builtin;
 
-  // 默认使用 icon.horse，因为 DDG 容易返回占位符
-  return `https://icon.horse/icon/${domain}`;
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 }
 
 export function getIconLoadState(url: string): 'loading' | 'loaded' | 'error' {
@@ -425,7 +436,7 @@ export function getIconLoadState(url: string): 'loading' | 'loaded' | 'error' {
   if (!domain) return 'loading';
 
   const cached = memoryCache.get(domain);
-  if (isUsableCacheEntry(cached)) return 'loaded';
+  if (isReliableCacheEntry(cached)) return 'loaded';
   if (cached) memoryCache.delete(domain);
   if (getBuiltinIcon(url)) return 'loaded';
 
@@ -469,7 +480,7 @@ async function detectBestIconForDomain(
 ): Promise<string> {
   const storedEntry = memoryCache.get(domain);
   const currentEntry =
-    isUsableCacheEntry(storedEntry) && !isSkippedIconUrl(storedEntry.url, options.skipUrl)
+    isReliableCacheEntry(storedEntry) && !isSkippedIconUrl(storedEntry.url, options.skipUrl)
       ? storedEntry
       : undefined;
   if (storedEntry && !currentEntry) memoryCache.delete(domain);
@@ -503,7 +514,7 @@ async function detectBestIconForDomain(
 
     const result = await checkImageSource(sourceUrl, url);
 
-    if (result && result.score >= MIN_CACHE_SCORE && result.score > currentScore) {
+    if (result && isCacheableIconResult(result) && result.score > currentScore) {
       currentScore = result.score;
       bestUrl = result.url;
 
@@ -533,7 +544,7 @@ async function detectBestIconForDomain(
 
       const result = await checkImageSource(iconUrl, url);
 
-      if (result && result.score >= MIN_CACHE_SCORE && result.score > currentScore) {
+      if (result && isCacheableIconResult(result) && result.score > currentScore) {
         // 从原网站直接获取的图标给予额外加分
         const bonusScore = result.score + 30;
 

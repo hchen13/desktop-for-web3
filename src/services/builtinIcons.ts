@@ -92,6 +92,7 @@ const BUILTIN_ICONS: IconMapping = {
   'deepseek.com': 'https://deepseek.com/favicon.ico',
 
   // 链上数据
+  'monitor-asdx.kayaquant.com': 'https://monitor-asdx.kayaquant.com/public/img/fav32.png',
   'metamask.io': 'https://www.google.com/s2/favicons?domain=metamask.io&sz=128',
   'www.metamask.io': 'https://www.google.com/s2/favicons?domain=metamask.io&sz=128',
   'phantom.app': 'https://www.google.com/s2/favicons?domain=phantom.app&sz=128',
