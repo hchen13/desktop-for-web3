@@ -39,7 +39,10 @@ export const GridIcon = (props: GridIconProps) => {
     setIsLoading(true);
     setImageError(false);
 
-    detectBestIcon(props.url)
+    detectBestIcon(props.url, {
+      ignoreBuiltin: Boolean(failedSrc),
+      skipUrl: failedSrc,
+    })
       .then((bestIconUrl) => {
         if (requestId !== detectionRequestId) return;
 

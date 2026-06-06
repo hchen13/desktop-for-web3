@@ -16,8 +16,8 @@ import { getSourcePriorityScore } from './faviconConfig';
 export const [isStorageLoaded, setStorageLoaded] = createSignal(false);
 
 // 缓存版本号 - 修改此值强制刷新缓存
-// v6: 忽略占位符和低质量缓存
-const STORAGE_KEY = 'icon_cache_v6';
+// v7: 允许失败的内置图标被动态检测结果覆盖
+const STORAGE_KEY = 'icon_cache_v7';
 
 // 缓存过期策略
 const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7天：完全过期，删除条目
@@ -29,6 +29,11 @@ interface IconCacheEntry {
   url: string;
   score: number;
   timestamp: number;
+}
+
+interface DetectBestIconOptions {
+  ignoreBuiltin?: boolean;
+  skipUrl?: string;
 }
 
 // 来源优先级 — 从 faviconConfig 单一来源 import，与 faviconService 保持一致
@@ -172,6 +177,11 @@ function isGenericIconService(url: string): boolean {
     url.includes('favicone.com') ||
     url.includes('icon.horse')
   );
+}
+
+function isSkippedIconUrl(sourceUrl: string, skipUrl?: string): boolean {
+  if (!skipUrl) return false;
+  return sourceUrl === skipUrl;
 }
 
 function checkImageSource(
@@ -405,12 +415,12 @@ export function getCachedIconUrl(url: string): string {
   const domain = extractDomain(url);
   if (!domain) return '';
 
-  const builtin = getBuiltinIcon(url);
-  if (builtin) return builtin;
-
   const cached = memoryCache.get(domain);
   if (isUsableCacheEntry(cached)) return cached.url;
   if (cached) memoryCache.delete(domain);
+
+  const builtin = getBuiltinIcon(url);
+  if (builtin) return builtin;
 
   // 默认使用 icon.horse，因为 DDG 容易返回占位符
   return `https://icon.horse/icon/${domain}`;
@@ -420,10 +430,10 @@ export function getIconLoadState(url: string): 'loading' | 'loaded' | 'error' {
   const domain = extractDomain(url);
   if (!domain) return 'loading';
 
-  if (getBuiltinIcon(url)) return 'loaded';
   const cached = memoryCache.get(domain);
   if (isUsableCacheEntry(cached)) return 'loaded';
   if (cached) memoryCache.delete(domain);
+  if (getBuiltinIcon(url)) return 'loaded';
 
   return 'loading';
 }
@@ -432,29 +442,42 @@ export function setIconLoadState(_url: string, _state: 'loading' | 'loaded' | 'e
   // 状态由缓存决定
 }
 
-export async function detectBestIcon(url: string): Promise<string> {
+export async function detectBestIcon(
+  url: string,
+  options: DetectBestIconOptions = {},
+): Promise<string> {
   const domain = extractDomain(url);
   if (!domain) return '';
 
   const builtin = getBuiltinIcon(url);
-  if (builtin) return builtin;
+  if (!options.ignoreBuiltin && builtin && !isSkippedIconUrl(builtin, options.skipUrl)) {
+    return builtin;
+  }
 
-  const activeDetection = detectingDomains.get(domain);
+  const detectionKey = `${domain}:${options.ignoreBuiltin ? 'dynamic' : 'default'}:${options.skipUrl ?? ''}`;
+  const activeDetection = detectingDomains.get(detectionKey);
   if (activeDetection) {
     return activeDetection;
   }
 
-  const detection = detectBestIconForDomain(url, domain).finally(() => {
-    detectingDomains.delete(domain);
+  const detection = detectBestIconForDomain(url, domain, options).finally(() => {
+    detectingDomains.delete(detectionKey);
   });
-  detectingDomains.set(domain, detection);
+  detectingDomains.set(detectionKey, detection);
 
   return detection;
 }
 
-async function detectBestIconForDomain(url: string, domain: string): Promise<string> {
+async function detectBestIconForDomain(
+  url: string,
+  domain: string,
+  options: DetectBestIconOptions,
+): Promise<string> {
   const storedEntry = memoryCache.get(domain);
-  const currentEntry = isUsableCacheEntry(storedEntry) ? storedEntry : undefined;
+  const currentEntry =
+    isUsableCacheEntry(storedEntry) && !isSkippedIconUrl(storedEntry.url, options.skipUrl)
+      ? storedEntry
+      : undefined;
   if (storedEntry && !currentEntry) memoryCache.delete(domain);
 
   const now = Date.now();
@@ -482,6 +505,8 @@ async function detectBestIconForDomain(url: string, domain: string): Promise<str
   const sources = getIconSources(url);
 
   const promises = sources.map(async (sourceUrl) => {
+    if (isSkippedIconUrl(sourceUrl, options.skipUrl)) return null;
+
     const result = await checkImageSource(sourceUrl, url);
 
     if (result && result.score >= MIN_CACHE_SCORE && result.score > currentScore) {
@@ -510,6 +535,8 @@ async function detectBestIconForDomain(url: string, domain: string): Promise<str
 
     // 检测从 HTML 解析出的图标
     const htmlPromises = htmlIcons.slice(0, 5).map(async (iconUrl) => {
+      if (isSkippedIconUrl(iconUrl, options.skipUrl)) return null;
+
       const result = await checkImageSource(iconUrl, url);
 
       if (result && result.score >= MIN_CACHE_SCORE && result.score > currentScore) {

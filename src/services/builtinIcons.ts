@@ -83,7 +83,7 @@ const BUILTIN_ICONS: IconMapping = {
   'apex.exchange': 'https://apex.exchange/favicon.ico',
 
   // AI 平台
-  'claude.ai': 'https://claude.ai/images/favicon.png',
+  'claude.ai': 'https://www.google.com/s2/favicons?domain=claude.ai&sz=128',
   'gemini.google.com': 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=128',
   'kimi.moonshot.cn': 'https://kimi.moonshot.cn/favicon.ico',
   'chat.deepseek.com': 'https://deepseek.com/favicon.ico',
@@ -151,8 +151,8 @@ const BUILTIN_ICONS: IconMapping = {
   'www.github.com': 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
 
   // 视频/娱乐
-  'youtube.com': 'https://www.youtube.com/s/desktop/f192f63f/img/favicon_144x144.png',
-  'www.youtube.com': 'https://www.youtube.com/s/desktop/f192f63f/img/favicon_144x144.png',
+  'youtube.com': 'https://www.google.com/s2/favicons?domain=youtube.com&sz=128',
+  'www.youtube.com': 'https://www.google.com/s2/favicons?domain=youtube.com&sz=128',
   'bilibili.com': 'https://www.bilibili.com/favicon.ico',
   'www.bilibili.com': 'https://www.bilibili.com/favicon.ico',
   'twitch.tv': 'https://static.twitchcdn.net/assets/favicon-32-d2926f9a79f1f5b.png',
