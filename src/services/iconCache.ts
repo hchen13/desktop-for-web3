@@ -16,8 +16,8 @@ import { getSourcePriorityScore } from './faviconConfig';
 export const [isStorageLoaded, setStorageLoaded] = createSignal(false);
 
 // 缓存版本号 - 修改此值强制刷新缓存
-// v8: 清理可能被 Chrome _favicon 灰色地球污染的 v7 缓存
-const STORAGE_KEY = 'icon_cache_v8';
+// v9: 泛用图标服务不再作为最终态，避免错误图标锁死
+const STORAGE_KEY = 'icon_cache_v9';
 
 // 缓存过期策略
 const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7天：完全过期，删除条目
@@ -34,6 +34,13 @@ interface IconCacheEntry {
 interface DetectBestIconOptions {
   ignoreBuiltin?: boolean;
   skipUrl?: string;
+  forceRefresh?: boolean;
+}
+
+interface FetchedText {
+  text: string;
+  responseUrl: string;
+  baseUrl: string;
 }
 
 // 来源优先级 — 从 faviconConfig 单一来源 import，与 faviconService 保持一致
@@ -41,15 +48,24 @@ interface DetectBestIconOptions {
 export const memoryCache = new Map<string, IconCacheEntry>();
 const detectingDomains = new Map<string, Promise<string>>();
 const updateCallbacks = new Map<string, Array<(url: string) => void>>();
+const HTML_FETCH_TIMEOUT_MS = 5000;
+const CORS_HTML_PROXIES = [
+  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
 
 function isUsableCacheEntry(entry: IconCacheEntry | undefined): entry is IconCacheEntry {
   return Boolean(entry && entry.score >= MIN_CACHE_SCORE);
 }
 
-function isReliableCacheEntry(entry: IconCacheEntry | undefined): entry is IconCacheEntry {
+function isDisplayableCacheEntry(entry: IconCacheEntry | undefined): entry is IconCacheEntry {
   return Boolean(
     entry && isUsableCacheEntry(entry) && (!isGenericIconService(entry.url) || entry.score >= 110),
   );
+}
+
+function isTrustedCacheEntry(entry: IconCacheEntry | undefined): entry is IconCacheEntry {
+  return Boolean(entry && isUsableCacheEntry(entry) && !isGenericIconService(entry.url));
 }
 
 async function loadStorageCache(): Promise<void> {
@@ -60,7 +76,7 @@ async function loadStorageCache(): Promise<void> {
       if (stored) {
         const now = Date.now();
         Object.entries(stored).forEach(([domain, entry]) => {
-          if (now - entry.timestamp < CACHE_MAX_AGE && isReliableCacheEntry(entry)) {
+          if (now - entry.timestamp < CACHE_MAX_AGE && isDisplayableCacheEntry(entry)) {
             memoryCache.set(domain, entry);
           }
         });
@@ -71,7 +87,7 @@ async function loadStorageCache(): Promise<void> {
         const parsed = JSON.parse(stored) as Record<string, IconCacheEntry>;
         const now = Date.now();
         Object.entries(parsed).forEach(([domain, entry]) => {
-          if (now - entry.timestamp < CACHE_MAX_AGE && isReliableCacheEntry(entry)) {
+          if (now - entry.timestamp < CACHE_MAX_AGE && isDisplayableCacheEntry(entry)) {
             memoryCache.set(domain, entry);
           }
         });
@@ -114,7 +130,7 @@ function getSourceScore(url: string, siteUrl?: string): number {
   if (siteUrl) {
     try {
       if (new URL(url).origin === new URL(siteUrl).origin) {
-        return 85;
+        return 95;
       }
     } catch {}
   }
@@ -122,8 +138,18 @@ function getSourceScore(url: string, siteUrl?: string): number {
   return getSourcePriorityScore(url);
 }
 
-function calculateSizeScore(width: number, height: number): number {
+function isSameOriginIconUrl(url: string, siteUrl?: string): boolean {
+  if (!siteUrl) return false;
+  try {
+    return new URL(url).origin === new URL(siteUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+function calculateSizeScore(width: number, height: number, url: string, siteUrl?: string): number {
   const size = Math.max(width, height);
+  if (size >= 16 && size < 32 && isSameOriginIconUrl(url, siteUrl)) return 12;
   if (size < 32) return 0; // 太小，淘汰
   if (size < 40) return 10 + (size - 32);
   if (size <= 64) return 25; // 最佳显示尺寸
@@ -186,6 +212,10 @@ function isGenericIconService(url: string): boolean {
   );
 }
 
+export function isGenericIconUrl(url: string): boolean {
+  return isGenericIconService(url);
+}
+
 function isSkippedIconUrl(sourceUrl: string, skipUrl?: string): boolean {
   if (!skipUrl) return false;
   return sourceUrl === skipUrl;
@@ -195,6 +225,65 @@ function isCacheableIconResult(result: { url: string; score: number }): boolean 
   return (
     result.score >= MIN_CACHE_SCORE && (!isGenericIconService(result.url) || result.score >= 110)
   );
+}
+
+function isTrustedIconResult(result: { url: string }): boolean {
+  return !isGenericIconService(result.url);
+}
+
+async function fetchTextWithTimeout(url: string, accept: string): Promise<Response | null> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), HTML_FETCH_TIMEOUT_MS);
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: accept,
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      },
+    });
+
+    if (!response.ok) return null;
+    return response;
+  } catch {
+    return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function fetchTextFromSite(
+  url: string,
+  accept: string,
+  useProxyFallback = true,
+): Promise<FetchedText | null> {
+  const candidates = [
+    { url, baseUrl: url, proxied: false },
+    ...(useProxyFallback
+      ? CORS_HTML_PROXIES.map((buildProxyUrl) => ({
+          url: buildProxyUrl(url),
+          baseUrl: url,
+          proxied: true,
+        }))
+      : []),
+  ];
+
+  for (const candidate of candidates) {
+    const response = await fetchTextWithTimeout(candidate.url, accept);
+    if (!response) continue;
+
+    const text = await response.text();
+    if (!text.trim()) continue;
+
+    return {
+      text,
+      responseUrl: candidate.proxied ? candidate.baseUrl : response.url || candidate.baseUrl,
+      baseUrl: candidate.proxied ? candidate.baseUrl : response.url || candidate.baseUrl,
+    };
+  }
+
+  return null;
 }
 
 function checkImageSource(
@@ -220,7 +309,7 @@ function checkImageSource(
         return;
       }
 
-      const sizeScore = calculateSizeScore(width, height);
+      const sizeScore = calculateSizeScore(width, height, url, siteUrl);
       if (sizeScore === 0) {
         resolve(null);
         return;
@@ -252,58 +341,87 @@ function checkImageSource(
  * 用于获取网站声明的高清图标（尤其是内部网站）
  * 返回找到的图标 URL 列表
  */
+async function parseManifestIcons(
+  manifestUrl: string,
+): Promise<Array<{ href: string; size: number }>> {
+  try {
+    const fetched = await fetchTextFromSite(
+      manifestUrl,
+      'application/manifest+json, application/json',
+    );
+    if (!fetched) return [];
+
+    const manifest = JSON.parse(fetched.text) as {
+      icons?: Array<{ src?: string; sizes?: string; type?: string }>;
+    };
+    if (!Array.isArray(manifest.icons)) return [];
+
+    return manifest.icons
+      .filter((icon) => icon.src)
+      .map((icon) => ({
+        href: new URL(icon.src!, fetched.responseUrl || manifestUrl).href,
+        size: parseIconSize(icon.sizes || ''),
+      }))
+      .sort((a, b) => b.size - a.size);
+  } catch {
+    return [];
+  }
+}
+
+function parseIconSize(value: string): number {
+  const sizes = value
+    .split(/\s+/)
+    .map((size) => parseInt(size.split('x')[0], 10))
+    .filter((size) => Number.isFinite(size));
+  return sizes.length ? Math.max(...sizes) : 0;
+}
+
+function resolveIconHref(href: string, baseUrl: string): string {
+  return new URL(href, baseUrl).href;
+}
+
 async function parseFaviconFromHtml(siteUrl: string): Promise<string[]> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const fetched = await fetchTextFromSite(siteUrl, 'text/html');
+    if (!fetched) return [];
 
-    const response = await fetch(siteUrl, {
-      signal: controller.signal,
-      headers: {
-        Accept: 'text/html',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      },
-    });
-    clearTimeout(timeout);
+    const html = fetched.text;
+    const baseUrl = fetched.baseUrl;
 
-    if (!response.ok) return [];
-
-    const html = await response.text();
-    const origin = new URL(siteUrl).origin;
-
-    // 匹配 <link rel="icon" href="..."> 或 <link rel="apple-touch-icon" href="...">
-    const linkRegex = /<link[^>]*rel=["'](?:icon|shortcut icon|apple-touch-icon)[^"']*["'][^>]*>/gi;
+    const linkRegex = /<link\b[^>]*>/gi;
+    const relRegex = /rel=["']([^"']+)["']/i;
     const hrefRegex = /href=["']([^"']+)["']/i;
     const sizesRegex = /sizes=["']([^"']+)["']/i;
+    const metaRegex = /<meta\b[^>]*(?:property|name)=["'](?:og:image|twitter:image)["'][^>]*>/gi;
+    const contentRegex = /content=["']([^"']+)["']/i;
 
     const icons: { href: string; size: number }[] = [];
+    const manifestUrls: string[] = [];
+    const metaImages: string[] = [];
     let match;
 
     while ((match = linkRegex.exec(html)) !== null) {
       const linkTag = match[0];
       const hrefMatch = linkTag.match(hrefRegex);
+      const relMatch = linkTag.match(relRegex);
+      if (!relMatch) continue;
       if (!hrefMatch) continue;
 
-      let href = hrefMatch[1];
+      const rel = relMatch[1].toLowerCase();
+      const href = resolveIconHref(hrefMatch[1], baseUrl);
 
-      // 转换为绝对 URL
-      if (href.startsWith('//')) {
-        href = 'https:' + href;
-      } else if (href.startsWith('/')) {
-        href = origin + href;
-      } else if (!href.startsWith('http')) {
-        href = origin + '/' + href;
+      if (rel.split(/\s+/).includes('manifest')) {
+        manifestUrls.push(href);
+        continue;
       }
 
-      // 解析尺寸
+      const isIcon =
+        rel.includes('icon') || rel.includes('mask-icon') || rel.includes('apple-touch-icon');
+      if (!isIcon) continue;
+
       const sizesMatch = linkTag.match(sizesRegex);
-      let size = 0;
-      if (sizesMatch) {
-        const sizeStr = sizesMatch[1].split('x')[0];
-        size = parseInt(sizeStr, 10) || 0;
-      }
+      let size = sizesMatch ? parseIconSize(sizesMatch[1]) : 0;
 
-      // 优先 SVG（无限缩放）
       if (href.includes('.svg')) {
         size = 999;
       }
@@ -311,10 +429,24 @@ async function parseFaviconFromHtml(siteUrl: string): Promise<string[]> {
       icons.push({ href, size });
     }
 
-    // 按尺寸排序，优先大图标
     icons.sort((a, b) => b.size - a.size);
 
-    return icons.map((i) => i.href);
+    while ((match = metaRegex.exec(html)) !== null) {
+      const contentMatch = match[0].match(contentRegex);
+      if (contentMatch) {
+        metaImages.push(resolveIconHref(contentMatch[1], baseUrl));
+      }
+    }
+
+    const manifestIcons = (
+      await Promise.all(
+        manifestUrls.slice(0, 2).map((manifestUrl) => parseManifestIcons(manifestUrl)),
+      )
+    ).flat();
+
+    return [...icons, ...manifestIcons, ...metaImages].map((i) =>
+      typeof i === 'string' ? i : i.href,
+    );
   } catch {
     return [];
   }
@@ -354,8 +486,15 @@ function getIconSources(siteUrl: string): string[] {
     const isSub = isSubdomain(domain);
     const parentDomain = getParentDomain(domain);
 
-    // 1. 直接访问子域名的 favicon.ico（对内部网站至关重要）
+    // 1. 直接访问站点同源常见图标路径（对内部网站至关重要）
     sources.push(`${origin}/favicon.ico`);
+    sources.push(`${origin}/favicon.svg`);
+    sources.push(`${origin}/favicon.png`);
+    sources.push(`${origin}/favicon-32x32.png`);
+    sources.push(`${origin}/apple-touch-icon.png`);
+    sources.push(`${origin}/logo.png`);
+    sources.push(`${origin}/logo.svg`);
+    sources.push(`${origin}/assets/logo.png`);
 
     // 2. Google Favicon（使用原始域名）
     sources.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=64`);
@@ -422,7 +561,7 @@ export function getCachedIconUrl(url: string): string {
   if (!domain) return '';
 
   const cached = memoryCache.get(domain);
-  if (isReliableCacheEntry(cached)) return cached.url;
+  if (isDisplayableCacheEntry(cached)) return cached.url;
   if (cached) memoryCache.delete(domain);
 
   const builtin = getBuiltinIcon(url);
@@ -436,7 +575,7 @@ export function getIconLoadState(url: string): 'loading' | 'loaded' | 'error' {
   if (!domain) return 'loading';
 
   const cached = memoryCache.get(domain);
-  if (isReliableCacheEntry(cached)) return 'loaded';
+  if (isTrustedCacheEntry(cached)) return 'loaded';
   if (cached) memoryCache.delete(domain);
   if (getBuiltinIcon(url)) return 'loaded';
 
@@ -459,7 +598,7 @@ export async function detectBestIcon(
     return builtin;
   }
 
-  const detectionKey = `${domain}:${options.ignoreBuiltin ? 'dynamic' : 'default'}:${options.skipUrl ?? ''}`;
+  const detectionKey = `${domain}:${options.ignoreBuiltin ? 'dynamic' : 'default'}:${options.forceRefresh ? 'force' : 'normal'}:${options.skipUrl ?? ''}`;
   const activeDetection = detectingDomains.get(detectionKey);
   if (activeDetection) {
     return activeDetection;
@@ -480,7 +619,7 @@ async function detectBestIconForDomain(
 ): Promise<string> {
   const storedEntry = memoryCache.get(domain);
   const currentEntry =
-    isReliableCacheEntry(storedEntry) && !isSkippedIconUrl(storedEntry.url, options.skipUrl)
+    isDisplayableCacheEntry(storedEntry) && !isSkippedIconUrl(storedEntry.url, options.skipUrl)
       ? storedEntry
       : undefined;
   if (storedEntry && !currentEntry) memoryCache.delete(domain);
@@ -489,22 +628,19 @@ async function detectBestIconForDomain(
   const entryAge = currentEntry ? now - currentEntry.timestamp : Infinity;
 
   // 判断缓存状态
-  const isFresh = entryAge < CACHE_SOFT_EXPIRE; // 新鲜：24小时内
-  const needsForceRefresh = entryAge >= CACHE_FORCE_REFRESH; // 强制刷新：超过3天
+  const isFresh = !options.forceRefresh && entryAge < CACHE_SOFT_EXPIRE; // 新鲜：24小时内
+  const needsForceRefresh = options.forceRefresh || entryAge >= CACHE_FORCE_REFRESH; // 强制刷新
 
   // 如果缓存新鲜且分数足够高，直接返回不做检测
-  if (
-    isFresh &&
-    currentEntry &&
-    currentEntry.score >= 60 &&
-    !isGenericIconService(currentEntry.url)
-  ) {
+  if (isFresh && currentEntry && isTrustedCacheEntry(currentEntry)) {
     return currentEntry.url;
   }
 
   // 强制刷新时忽略旧分数，从 0 开始
   let currentScore = needsForceRefresh ? 0 : (currentEntry?.score ?? 0);
   let bestUrl = currentEntry?.url ?? '';
+
+  const htmlIconsPromise = parseFaviconFromHtml(url);
 
   // 阶段 1: 检测标准图标源
   const sources = getIconSources(url);
@@ -525,7 +661,9 @@ async function detectBestIconForDomain(
       });
 
       scheduleSave();
-      notifyIconUpdate(domain, result.url);
+      if (isTrustedIconResult(result)) {
+        notifyIconUpdate(domain, result.url);
+      }
     }
 
     return result;
@@ -535,8 +673,8 @@ async function detectBestIconForDomain(
 
   // 阶段 2: 如果当前分数较低，尝试从 HTML 解析 favicon
   // 这对内部网站特别有用，因为 DDG/icon.horse 无法获取
-  if (currentScore < 110 || isGenericIconService(bestUrl)) {
-    const htmlIcons = await parseFaviconFromHtml(url);
+  if (currentScore < 140 || isGenericIconService(bestUrl)) {
+    const htmlIcons = await htmlIconsPromise;
 
     // 检测从 HTML 解析出的图标
     const htmlPromises = htmlIcons.slice(0, 5).map(async (iconUrl) => {
@@ -570,6 +708,43 @@ async function detectBestIconForDomain(
   }
 
   return bestUrl;
+}
+
+async function removeDomainFromStorage(domain: string): Promise<void> {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const result = await chrome.storage.local.get(STORAGE_KEY);
+      const stored = result[STORAGE_KEY] as Record<string, IconCacheEntry> | undefined;
+      if (stored && domain in stored) {
+        delete stored[domain];
+        await chrome.storage.local.set({ [STORAGE_KEY]: stored });
+      }
+    } else {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Record<string, IconCacheEntry>;
+      if (domain in parsed) {
+        delete parsed[domain];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
+  } catch (e) {
+    console.warn('[IconCache] Failed to remove domain cache:', e);
+  }
+}
+
+export async function refreshIcon(url: string, skipUrl?: string): Promise<string> {
+  const domain = extractDomain(url);
+  if (!domain) return '';
+
+  memoryCache.delete(domain);
+  await removeDomainFromStorage(domain);
+
+  return detectBestIcon(url, {
+    ignoreBuiltin: Boolean(skipUrl),
+    skipUrl,
+    forceRefresh: true,
+  });
 }
 
 export function clearAllCache(): void {

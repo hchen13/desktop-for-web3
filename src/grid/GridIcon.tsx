@@ -10,10 +10,13 @@ import {
   getCachedIconUrl,
   getIconLoadState,
   detectBestIcon,
+  refreshIcon,
   isStorageLoaded,
   isLikelyFallbackIcon,
+  isGenericIconUrl,
   onIconUpdate,
 } from '../services/iconCache';
+import { BootstrapIcon } from '../components/BootstrapIcon';
 
 interface GridIconProps {
   url: string;
@@ -31,6 +34,7 @@ export const GridIcon = (props: GridIconProps) => {
 
   // 本地状态：追踪实际图片元素是否已加载完成
   const [isImgLoaded, setIsImgLoaded] = createSignal(false);
+  const [isRefreshing, setIsRefreshing] = createSignal(false);
   let detectionRequestId = 0;
 
   const requestBestIcon = (failedSrc?: string) => {
@@ -60,6 +64,11 @@ export const GridIcon = (props: GridIconProps) => {
       .catch(() => {
         if (requestId !== detectionRequestId || isImgLoaded()) return;
         setImageError(true);
+      })
+      .finally(() => {
+        if (requestId === detectionRequestId) {
+          setIsRefreshing(false);
+        }
       });
   };
 
@@ -69,10 +78,16 @@ export const GridIcon = (props: GridIconProps) => {
 
     // 注册图标更新回调
     const unsubscribe = onIconUpdate(url, (newIconUrl) => {
+      const currentIconUrl = iconUrl();
       detectionRequestId++;
-      setIconUrl(newIconUrl);
-      setIsImgLoaded(false); // 新图片需要重新加载
+      if (newIconUrl !== currentIconUrl) {
+        setIconUrl(newIconUrl);
+        setIsImgLoaded(false); // 新图片需要重新加载
+      } else {
+        setIsImgLoaded(true);
+      }
       setImageError(false);
+      setIsRefreshing(false);
     });
 
     // 清理回调
@@ -129,6 +144,48 @@ export const GridIcon = (props: GridIconProps) => {
     window.open(props.url, '_blank');
   };
 
+  const handleRefreshClick = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const currentIconUrl = iconUrl();
+    const skippedSrc =
+      imageError() || !isImgLoaded() || isGenericIconUrl(currentIconUrl)
+        ? currentIconUrl
+        : undefined;
+    const requestId = ++detectionRequestId;
+    setIsRefreshing(true);
+    setIsImgLoaded(false);
+    setImageError(false);
+
+    refreshIcon(props.url, skippedSrc)
+      .then((bestIconUrl) => {
+        if (requestId !== detectionRequestId) return;
+
+        if (bestIconUrl) {
+          if (bestIconUrl !== iconUrl()) {
+            setIconUrl(bestIconUrl);
+            setIsImgLoaded(false);
+          } else {
+            setIsImgLoaded(true);
+          }
+          setImageError(false);
+          return;
+        }
+
+        setImageError(true);
+      })
+      .catch(() => {
+        if (requestId !== detectionRequestId) return;
+        setImageError(true);
+      })
+      .finally(() => {
+        if (requestId === detectionRequestId) {
+          setIsRefreshing(false);
+        }
+      });
+  };
+
   const handleImageLoad = (e: Event) => {
     const img = e.target as HTMLImageElement;
     const currentSrc = img.currentSrc || img.src;
@@ -179,6 +236,20 @@ export const GridIcon = (props: GridIconProps) => {
             <span class="grid-icon__error">{props.name.charAt(0).toUpperCase()}</span>
           </div>
         </Show>
+
+        <button
+          type="button"
+          classList={{
+            'grid-icon__refresh': true,
+            'grid-icon__refresh--visible': imageError() || isRefreshing(),
+            'grid-icon__refresh--spinning': isRefreshing(),
+          }}
+          title="重新加载图标"
+          aria-label="重新加载图标"
+          onClick={handleRefreshClick}
+        >
+          <BootstrapIcon iconName="arrow-clockwise" size={12} />
+        </button>
       </div>
       <span class="grid-icon__name">{props.name}</span>
     </div>

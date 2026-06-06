@@ -532,6 +532,44 @@ body.is-dragging * {
   font-weight: 500;
 }
 
+.grid-icon__refresh {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--widget-divider);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: var(--bg-control-hover);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.grid-icon:hover .grid-icon__refresh,
+.grid-icon__refresh--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.grid-icon__refresh:hover {
+  background: var(--bg-control-active);
+}
+
+.grid-icon__refresh--spinning i {
+  animation: spin 0.8s linear infinite;
+}
+
 /* Spinner 动画 */
 .spinner {
   width: 20px;

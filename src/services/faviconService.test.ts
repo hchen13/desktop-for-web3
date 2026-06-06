@@ -18,9 +18,11 @@ import {
   getIconLoadState,
   isLikelyFallbackIcon,
   memoryCache,
+  refreshIcon,
 } from './iconCache';
 
 type ImageConstructor = typeof globalThis.Image;
+type FetchMockResponse = Pick<Response, 'ok' | 'url' | 'text'>;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -56,6 +58,19 @@ function mockImageLoader(resolveImage: (src: string) => { width: number; height:
   }
 
   vi.stubGlobal('Image', MockImage as unknown as ImageConstructor);
+}
+
+function mockHtmlFetch(html = '', responseUrl = 'https://example.com/') {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (): Promise<FetchMockResponse> => {
+      return {
+        ok: Boolean(html),
+        url: responseUrl,
+        text: async () => html,
+      };
+    }),
+  );
 }
 
 describe('SOURCE_PRIORITY consistency', () => {
@@ -196,6 +211,7 @@ describe('iconCache.getCachedIconUrl', () => {
 
   it('can bypass a failed builtin icon and cache a discovered source', async () => {
     const failedBuiltin = 'https://www.google.com/s2/favicons?domain=youtube.com&sz=128';
+    mockHtmlFetch();
     mockImageLoader((src) => {
       if (src === 'https://www.youtube.com/favicon.ico') {
         return { width: 64, height: 64 };
@@ -213,6 +229,7 @@ describe('iconCache.getCachedIconUrl', () => {
   });
 
   it('ignores a failed cached icon while detecting replacements', async () => {
+    mockHtmlFetch();
     memoryCache.set('www.youtube.com', {
       url: 'https://www.youtube.com/broken-cached-icon.png',
       score: 130,
@@ -246,6 +263,65 @@ describe('iconCache.getCachedIconUrl', () => {
       'https://www.google.com/s2/favicons?domain=placeholder.example&sz=128',
     );
     expect(memoryCache.has('placeholder.example')).toBe(false);
+  });
+
+  it('prefers an HTML-declared app icon over generic favicon services', async () => {
+    mockHtmlFetch(
+      '<html><head><link rel="icon" type="image/png" href="/brand/icon.png" /></head></html>',
+      'https://app.stablestock.finance/',
+    );
+    mockImageLoader((src) => {
+      if (src === 'https://app.stablestock.finance/brand/icon.png') {
+        return { width: 64, height: 64 };
+      }
+      if (src.includes('google.com/s2/favicons') || src.includes('gstatic.com/faviconV2')) {
+        return { width: 64, height: 64 };
+      }
+      return null;
+    });
+
+    const result = await detectBestIcon('https://app.stablestock.finance');
+
+    expect(result).toBe('https://app.stablestock.finance/brand/icon.png');
+    expect(memoryCache.get('app.stablestock.finance')?.url).toBe(
+      'https://app.stablestock.finance/brand/icon.png',
+    );
+  });
+
+  it('keeps generic caches displayable but not loaded', () => {
+    const genericIcon =
+      'https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https%3A%2F%2Fapp.stablestock.finance&size=64';
+    memoryCache.set('app.stablestock.finance', {
+      url: genericIcon,
+      score: 120,
+      timestamp: Date.now(),
+    });
+
+    expect(getCachedIconUrl('https://app.stablestock.finance')).toBe(genericIcon);
+    expect(getIconLoadState('https://app.stablestock.finance')).toBe('loading');
+  });
+
+  it('refreshes a bad cached icon and stores the discovered replacement', async () => {
+    const badIcon = 'https://icon.horse/icon/www.stablestock.finance';
+    memoryCache.set('app.stablestock.finance', {
+      url: badIcon,
+      score: 60,
+      timestamp: Date.now(),
+    });
+    mockHtmlFetch();
+    mockImageLoader((src) => {
+      if (src === 'https://app.stablestock.finance/logo.png') {
+        return { width: 23, height: 22 };
+      }
+      return null;
+    });
+
+    const result = await refreshIcon('https://app.stablestock.finance', badIcon);
+
+    expect(result).toBe('https://app.stablestock.finance/logo.png');
+    expect(memoryCache.get('app.stablestock.finance')?.url).toBe(
+      'https://app.stablestock.finance/logo.png',
+    );
   });
 
   it('returns Google favicon fallback for a hostname with no cache', () => {
