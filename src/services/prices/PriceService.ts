@@ -34,6 +34,7 @@ import {
 } from './instrumentResolver';
 import { QuoteStore } from './quoteStore';
 import { QuoteSocketPool } from './socket';
+import { TransportLifecycle, type TransportMode } from './lifecycle';
 import { fetchTargetedQuotes, SOCKET_ENDPOINTS } from './venues';
 
 const SNAPSHOT_STORAGE_KEY = 'prices_cache_v2';
@@ -44,8 +45,13 @@ const OBSOLETE_STORAGE_KEYS = ['prices_cache_v1', 'pyth_catalog_v1'];
 export const WS_UNCOVERED_REFRESH_MS = 60_000;
 /** WebSocket 高频推送合并成 UI 通知的最小间隔 */
 export const NOTIFY_COALESCE_MS = 250;
-/** REALTIME 下报价的新鲜度窗口 */
-export const REALTIME_FRESHNESS_MS = 3 * 60_000;
+/** 各模式下报价的新鲜度窗口 */
+export const FRESHNESS_WINDOW_MS: Record<TransportMode, number> = {
+  off: 5 * 60_000,
+  realtime: 3 * 60_000,
+  'passive-visible': 5 * 60_000,
+  'passive-hidden': 20 * 60_000,
+};
 
 interface PersistedSnapshots {
   version: 'v2';
@@ -83,6 +89,13 @@ export class PriceService {
   private refreshInFlight = new Map<AssetKey, Promise<void>>();
 
   private pool = new QuoteSocketPool(SOCKET_ENDPOINTS, (quotes) => this.onSocketQuotes(quotes));
+  private lifecycle = new TransportLifecycle({
+    hasWork: () => this.desiredInstruments.length > 0,
+    onModeChange: (mode, previous) => this.onModeChange(mode, previous),
+    onPassiveTick: () => {
+      void this.refreshAssets().catch(() => {});
+    },
+  });
   protected desiredInstruments: VenueInstrument[] = [];
   private currentUnion = new Set<AssetKey>();
 
@@ -160,6 +173,7 @@ export class PriceService {
   }
 
   __resetForTest(): void {
+    this.lifecycle.stop();
     this.stopTransport();
     if (this.notifyTimer) {
       clearTimeout(this.notifyTimer);
@@ -258,30 +272,35 @@ export class PriceService {
     }
   }
 
-  /** 传输层落地；生命周期状态机在子类里覆写 */
+  /** 传输层落地：先让状态机判定模式，再把当前 desired set 应用到已开的连接上 */
   protected applyTransport(): void {
-    if (this.desiredInstruments.length === 0) {
-      this.stopTransport();
+    this.lifecycle.start();
+    this.lifecycle.reconcileDesiredMode();
+    if (this.lifecycle.getMode() === 'realtime' && this.desiredInstruments.length > 0) {
+      this.pool.setDesiredInstruments(this.desiredInstruments);
+      this.startUncoveredTimer();
+    }
+  }
+
+  private onModeChange(mode: TransportMode, previous: TransportMode): void {
+    if (mode === 'realtime') {
+      this.pool.setDesiredInstruments(this.desiredInstruments);
+      this.startUncoveredTimer();
+      // 从 passive / off 回到 REALTIME 时立即补一次；宽限期内根本不会走到这里，
+      // 所以不会因为快速 focus/blur 抖动产生额外请求或重连
+      if (previous !== 'realtime') void this.refreshAssets().catch(() => {});
       return;
     }
-    this.pool.setDesiredInstruments(this.desiredInstruments);
-    this.startUncoveredTimer();
-  }
-
-  protected openSockets(): void {
-    this.pool.setDesiredInstruments(this.desiredInstruments);
-  }
-
-  protected closeSockets(): void {
     this.pool.closeAll();
+    this.clearUncoveredTimer();
   }
 
   protected freshnessWindowMs(): number {
-    return REALTIME_FRESHNESS_MS;
+    return FRESHNESS_WINDOW_MS[this.lifecycle.getMode()];
   }
 
-  protected hasDesiredInstruments(): boolean {
-    return this.desiredInstruments.length > 0;
+  __transportModeForTest(): TransportMode {
+    return this.lifecycle.getMode();
   }
 
   // ============ instrument 解析 ============

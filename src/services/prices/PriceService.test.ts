@@ -168,6 +168,9 @@ function mockQuoteFetch(prices: Record<string, number>, log: FetchLog) {
 let service: PriceService;
 
 beforeEach(() => {
+  // REALTIME 需要 visible + focused；jsdom 默认 hasFocus() 为 false
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
   memoryStorage()?.__reset?.();
   exchangeCatalog.__resetForTest();
   SilentSocket.reset();

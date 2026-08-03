@@ -207,6 +207,8 @@ const CoinRow = (props: CoinRowProps) => {
 interface WatchlistWidgetProps {
   elementId?: string;
   state?: WidgetState;
+  /** 所在 layout 是否 active；keep-alive 的隐藏 layout 不应贡献行情订阅 */
+  isActiveLayout?: boolean;
   onStateChange?: (newState: WidgetState) => void;
 }
 
@@ -307,10 +309,16 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
     subscription.updateAssets(keys);
   });
 
+  createEffect(() => {
+    const active = props.isActiveLayout !== false;
+    subscription?.setActive(active);
+  });
+
   onMount(() => {
     subscription = priceService.subscribe(new Set(assetKeys()), (next) => {
       setSnapshots(new Map(next));
     });
+    subscription.setActive(props.isActiveLayout !== false);
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 30000);

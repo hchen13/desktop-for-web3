@@ -67,4 +67,4 @@ worker/dist
 coverage/
 tests/diagnostic-output/
 tests/screenshots/
-tests/playwright-profile/
+tests/playwright-profile*/

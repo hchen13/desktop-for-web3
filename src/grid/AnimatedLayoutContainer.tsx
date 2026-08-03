@@ -9,6 +9,9 @@
  * 4. 无位移，只有透明度变化
  *
  * 优势：组件实例不销毁，图标加载状态得以保留，切回时无需重新加载
+ *
+ * 因为隐藏 layout 的组件不会卸载，layout 是否 active 必须显式往下传，
+ * 否则后台 layout 的 Watchlist 会继续贡献行情订阅。
  */
 
 import { createSignal, createEffect, createMemo, For } from 'solid-js';
@@ -68,7 +71,7 @@ export const AnimatedLayoutContainer = () => {
                 transition: 'opacity 0.15s ease-out',
               }}
             >
-              <GridContainer layoutId={layout.id} />
+              <GridContainer layoutId={layout.id} isActiveLayout={isActive()} />
             </div>
           );
         }}

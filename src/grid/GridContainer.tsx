@@ -137,6 +137,8 @@ const getLazyComponent = (component: string) => {
 
 interface GridContainerProps {
   layoutId?: string;
+  /** 当前 layout 是否可见激活；keep-alive 下必须显式传，不能靠扫全局 store 反查 */
+  isActiveLayout?: boolean;
 }
 
 export const GridContainer = (props: GridContainerProps = {}) => {
@@ -809,6 +811,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
                         component={(element as any).component}
                         elementId={element.id}
                         state={element.state}
+                        isActiveLayout={props.isActiveLayout !== false}
                         onStateChange={(newState) => updateElementState(element.id, newState)}
                       />
                     </div>
@@ -913,6 +916,7 @@ function WidgetRenderer(props: {
   component: string;
   elementId: string;
   state: Record<string, unknown> | undefined;
+  isActiveLayout: boolean;
   onStateChange: (newState: Record<string, unknown>) => void;
 }) {
   const LazyComp = getLazyComponent(props.component);
@@ -924,6 +928,7 @@ function WidgetRenderer(props: {
       <LazyComp
         elementId={props.elementId}
         state={props.state}
+        isActiveLayout={props.isActiveLayout}
         onStateChange={props.onStateChange}
       />
     </Suspense>
