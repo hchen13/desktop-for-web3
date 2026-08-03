@@ -1,6 +1,6 @@
 /**
  * Rate Monitor 服务类型定义
- * 
+ *
  * 支持的货币组合：
  * - 稳定币: USDT, USDC
  * - 法币: USD, CNY, JPY, KRW
@@ -22,7 +22,7 @@ export interface ExchangeRate {
   /** 数据更新时间 (timestamp) */
   updatedAt: number;
   /** 数据来源 */
-  source: 'coingecko' | 'upbit' | 'pyth' | 'calculated';
+  source: 'coingecko' | 'upbit';
 }
 
 /** 所有汇率数据 (8 种组合) */
@@ -31,8 +31,8 @@ export interface AllRates {
   USDC: Record<FiatCurrency, ExchangeRate | null>;
 }
 
-/** 服务状态 */
-export type RateStatus = 'idle' | 'syncing' | 'live' | 'error';
+/** 服务状态；degraded 表示部分法币这一轮没有拿到新值，展示的是上一轮缓存 */
+export type RateStatus = 'idle' | 'syncing' | 'live' | 'degraded' | 'error';
 
 /** 服务数据状态 */
 export interface RateDataState {
@@ -82,16 +82,4 @@ export interface UpbitTickerResponse {
   market: string;
   trade_price: number;
   // ... 其他字段省略
-}
-
-/** Pyth Hermes 价格响应 */
-export interface PythPriceResponse {
-  parsed?: Array<{
-    id: string;
-    price: {
-      price: string;
-      expo: number;
-      publish_time: number;
-    };
-  }>;
 }

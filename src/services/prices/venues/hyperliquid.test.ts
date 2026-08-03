@@ -93,7 +93,11 @@ describe('HIP-3 instrument 解析', () => {
       const body = JSON.parse(String((init as RequestInit)?.body ?? '{}'));
       if (body.type === 'perpDexs') {
         return new Response(
-          JSON.stringify([null, { name: 'xyz', deployer: TRUSTED_DEPLOYER }, { name: 'flx', deployer: '0xabc' }]),
+          JSON.stringify([
+            null,
+            { name: 'xyz', deployer: TRUSTED_DEPLOYER },
+            { name: 'flx', deployer: '0xabc' },
+          ]),
           { status: 200 },
         );
       }
@@ -123,7 +127,13 @@ describe('HIP-3 报价', () => {
   it('默认使用 oraclePx，24h 变化由 prevDayPx 推出', () => {
     const quote = normalizeHyperliquidCtx(
       instrument,
-      { oraclePx: '308.87', markPx: '308.95', midPx: '308.975', prevDayPx: '309.69', dayNtlVlm: '13125421.78' },
+      {
+        oraclePx: '308.87',
+        markPx: '308.95',
+        midPx: '308.975',
+        prevDayPx: '309.69',
+        dayNtlVlm: '13125421.78',
+      },
       1785739288000,
     );
     expect(quote).toMatchObject({

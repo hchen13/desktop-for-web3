@@ -5,7 +5,7 @@
  * - 显示稳定币 (USDT/USDC) 与法币 (USD/CNY/JPY/KRW) 之间的汇率
  * - 支持切换货币对和交换显示方向
  * - 实时/同步状态指示 (参考 News 组件样式)
- * - 数据来源: CoinGecko (默认) + Upbit/Pyth (fallback)
+ * - 数据来源: CoinGecko (主源) + Upbit (仅补 KRW)
  * - 使用 Portal 渲染下拉菜单，避免被父组件 overflow 裁剪
  * - 每个实例的设置独立存储在 GridElement.state.settings 中
  * 

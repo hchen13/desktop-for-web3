@@ -52,7 +52,7 @@ if (fs.existsSync(PROFILE)) fs.rmSync(PROFILE, { recursive: true, force: true })
   await page.goto(`chrome-extension://${extId}/src/newtab/index.html`, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForSelector('[data-element-id="widget-watchlist"]', { timeout: 10000 });
 
-  // 等价格 + Pyth 实时 + benchmark 24h%
+  // 等交易所行情首轮 targeted 刷新 + WebSocket 推送
   await page.waitForTimeout(12000);
 
   const text = await page.locator('[data-element-id="widget-watchlist"]').innerText();

@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  CATALOG_TTL_MS,
-  EXCHANGE_CATALOG_STORAGE_KEY,
-  exchangeCatalog,
-} from './exchangeCatalog';
+import { CATALOG_TTL_MS, EXCHANGE_CATALOG_STORAGE_KEY, exchangeCatalog } from './exchangeCatalog';
 import type { VenueInstrument } from './types';
 import { makeInstrument } from './venues/shared';
 
@@ -46,9 +42,7 @@ function mockVenueFetch(options: {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input);
     const fail = (venue: string) =>
-      options.failVenue === venue
-        ? new Response('boom', { status: 503 })
-        : null;
+      options.failVenue === venue ? new Response('boom', { status: 503 }) : null;
 
     if (url.includes('okx.com')) {
       const failed = fail('okx');
@@ -80,9 +74,7 @@ function mockVenueFetch(options: {
       const body = JSON.parse(String((init as RequestInit)?.body ?? '{}'));
       if (body.type === 'perpDexs') {
         return new Response(
-          JSON.stringify([
-            { name: 'xyz', deployer: '0x88806a71d74ad0a510b350545c9ae490912f0888' },
-          ]),
+          JSON.stringify([{ name: 'xyz', deployer: '0x88806a71d74ad0a510b350545c9ae490912f0888' }]),
           { status: 200 },
         );
       }
@@ -199,6 +191,45 @@ describe('catalog 请求时机', () => {
   });
 });
 
+describe('冷启动 mapping 回写', () => {
+  it('回写 candidate mapping 不会把 catalog 标成 fresh', async () => {
+    await exchangeCatalog.loadCachedOnly();
+    await exchangeCatalog.mergeResolvedInstruments([
+      instrument({ instrumentId: 'XNVDA-USDT', symbol: 'NVDA' }),
+    ]);
+
+    expect(exchangeCatalog.instrumentsFor('stock:NVDA')).toHaveLength(1);
+    expect(exchangeCatalog.hasData()).toBe(true);
+    expect(exchangeCatalog.isFresh()).toBe(false);
+  });
+
+  it('随后打开弹窗仍会拉一次完整 catalog', async () => {
+    await exchangeCatalog.loadCachedOnly();
+    await exchangeCatalog.mergeResolvedInstruments([
+      instrument({ instrumentId: 'XNVDA-USDT', symbol: 'NVDA' }),
+    ]);
+    const fetchSpy = mockVenueFetch({
+      okxSpot: [
+        {
+          instType: 'SPOT',
+          instId: 'XAAPL-USDT',
+          instCategory: '3',
+          baseCcy: 'XAAPL',
+          quoteCcy: 'USDT',
+          state: 'live',
+        },
+      ],
+    });
+
+    await exchangeCatalog.ensureFresh();
+    await exchangeCatalog.__pendingRefreshForTest();
+
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(exchangeCatalog.isSelectable('stock:AAPL')).toBe(true);
+    expect(exchangeCatalog.isFresh()).toBe(true);
+  });
+});
+
 describe('catalog 合并规则', () => {
   it('单个 venue 失败只降级该 venue，其余照常更新', async () => {
     await seedCache(
@@ -268,7 +299,10 @@ describe('catalog 合并规则', () => {
 
     await exchangeCatalog.ensureFresh();
 
-    const venues = exchangeCatalog.instrumentsFor('stock:NVDA').map((i) => i.venue).sort();
+    const venues = exchangeCatalog
+      .instrumentsFor('stock:NVDA')
+      .map((i) => i.venue)
+      .sort();
     expect(venues).toEqual(['binance', 'bitget', 'okx']);
   });
 

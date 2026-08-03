@@ -13,6 +13,7 @@
  */
 
 import type { VenueInstrument, VenueQuote } from '../types';
+import type { SocketEndpoint } from '../socket';
 import {
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
@@ -212,3 +213,33 @@ export async function fetchHyperliquidQuotes(
     }),
   );
 }
+
+// ============ WebSocket ============
+
+function subscription(instrument: VenueInstrument) {
+  return { type: 'activeAssetCtx', coin: instrument.instrumentId };
+}
+
+export const hyperliquidSocketEndpoint: SocketEndpoint = {
+  key: 'hyperliquid',
+  venue: 'hyperliquid',
+  url: HYPERLIQUID_WS_URL,
+  supports: () => true,
+  buildSubscribe: (instruments) =>
+    instruments.map((i) => ({ method: 'subscribe', subscription: subscription(i) })),
+  buildUnsubscribe: (instruments) =>
+    instruments.map((i) => ({ method: 'unsubscribe', subscription: subscription(i) })),
+  parseMessage: (data, instruments) => {
+    if (!data || data[0] !== '{') return [];
+    const json = JSON.parse(data) as {
+      channel?: string;
+      data?: { coin?: string; ctx?: HyperliquidAssetCtx };
+    };
+    if (json.channel !== 'activeAssetCtx' || !json.data?.coin || !json.data.ctx) return [];
+    const instrument = instruments.find((i) => i.instrumentId === json.data!.coin);
+    if (!instrument) return [];
+    const quote = normalizeHyperliquidCtx(instrument, json.data.ctx);
+    return quote ? [quote] : [];
+  },
+  heartbeat: { intervalMs: 30_000, payload: () => ({ method: 'ping' }) },
+};

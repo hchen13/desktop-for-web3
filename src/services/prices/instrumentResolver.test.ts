@@ -13,11 +13,7 @@ function idsFor(assetKey: string, tier: 1 | 2 | 3) {
 
 describe('冷启动 candidate 生成', () => {
   it('crypto 用 curated cexPair', () => {
-    expect(idsFor('crypto:BTC', 1)).toEqual([
-      'okx:BTC-USDT',
-      'bitget:BTCUSDT',
-      'binance:BTCUSDT',
-    ]);
+    expect(idsFor('crypto:BTC', 1)).toEqual(['okx:BTC-USDT', 'bitget:BTCUSDT', 'binance:BTCUSDT']);
   });
 
   it('股票 / ETF 的 Tier 1 是三家 tokenized spot', () => {

@@ -1,17 +1,27 @@
 /**
- * Watchlist Widget — 多源价格监控组件
+ * Watchlist Widget —— 交易所参考价监控组件
  *
  * 接入 PriceService（src/services/prices）：
- *  - subscribe 时把当前监控的 symbol 集合喂给单例
- *  - 多 instance 共享同一份后台数据
+ *  - 用稳定的 PriceSubscription handle，换币只更新 AssetKey 集合，不重建订阅
+ *  - 换币后立即 targeted 刷新一次，不等下一轮 timer，也不需要刷新页面
  *  - 行点击：跳转对应资产详情页
+ *
+ * 展示的是交易所提供的股票关联产品参考价，change24h 是该产品自身的滚动 24 小时
+ * 变化，不是美股相对上一常规交易日收盘的涨跌。
  */
 
-import { Show, onMount, onCleanup, createSignal, createMemo, Index } from 'solid-js';
+import { Show, onMount, onCleanup, createSignal, createMemo, createEffect, Index } from 'solid-js';
 import { priceService } from '../../services/prices/PriceService';
-import { getAssetMeta, getLogoUrlChain } from '../../services/prices/assets';
-import type { LegacyPriceSnapshot as PriceSnapshot } from '../../services/prices/legacyTypes';
-import type { AssetMeta } from '../../services/prices/types';
+import { getCuratedAsset, getLogoUrlChain } from '../../services/prices/assets';
+import { assetKeyFromSetting, assetKeySymbol } from '../../services/prices/assetKey';
+import { fallbackMetaFor } from '../../services/prices/instrumentResolver';
+import { describeCoverage } from '../../services/prices/aggregate';
+import type {
+  AssetKey,
+  AssetMeta,
+  PriceSnapshot,
+  PriceSubscription,
+} from '../../services/prices/types';
 import { useContextMenu } from '../layout/ContextMenu';
 import { mergeMenuItems } from '../../grid/contextMenuUtils';
 import { WatchlistEditDialog } from './WatchlistEditDialog';
@@ -41,6 +51,10 @@ const formatChange = (change: number | null): string => {
   return `${change.toFixed(2)}%`;
 };
 
+function metaFor(assetKey: AssetKey): AssetMeta | null {
+  return getCuratedAsset(assetKey) ?? fallbackMetaFor(assetKey);
+}
+
 function getDetailUrl(meta: AssetMeta): string {
   switch (meta.category) {
     case 'crypto':
@@ -57,8 +71,15 @@ function getDetailUrl(meta: AssetMeta): string {
   }
 }
 
-function logoFor(meta: AssetMeta): string[] {
-  return getLogoUrlChain(meta);
+/** 价格 tooltip：交易所参考价 + 参与 venues + coverage tier */
+function describeSnapshot(snapshot: PriceSnapshot): string {
+  const venues = snapshot.sources.length > 0 ? snapshot.sources.join(' / ') : '无';
+  return [
+    '交易所参考价',
+    `来源：${venues}`,
+    `覆盖：${describeCoverage(snapshot)}`,
+    `计价：${snapshot.quoteCurrency}`,
+  ].join('\n');
 }
 
 const PriceDisplay = (props: { snapshot: PriceSnapshot; now: number }) => {
@@ -67,7 +88,8 @@ const PriceDisplay = (props: { snapshot: PriceSnapshot; now: number }) => {
   const change = () => props.snapshot.change24h;
   const isValid = () => change() !== null && Number.isFinite(change());
   const cls = () => (isValid() && change()! >= 0 ? 'up' : 'down');
-  const isStale = () => props.now - props.snapshot.lastUpdate > STALE_PRICE_MS;
+  const isStale = () =>
+    props.snapshot.quality !== 'live' || props.now - props.snapshot.lastUpdate > STALE_PRICE_MS;
   return (
     <div class="price-item__values">
       <span
@@ -75,7 +97,7 @@ const PriceDisplay = (props: { snapshot: PriceSnapshot; now: number }) => {
           'price-item__price': true,
           'price-item__price--stale': isStale(),
         }}
-        title={isStale() ? '数据源重试中' : undefined}
+        title={describeSnapshot(props.snapshot)}
       >
         {formatPrice(props.snapshot.price)}
       </span>
@@ -86,7 +108,8 @@ const PriceDisplay = (props: { snapshot: PriceSnapshot; now: number }) => {
 
 interface CoinRowProps {
   setting: WatchlistCoinSetting;
-  getSnapshot: (symbol: string) => PriceSnapshot | null;
+  assetKey: AssetKey;
+  getSnapshot: (assetKey: AssetKey) => PriceSnapshot | null;
   isDataLate: boolean;
   now: number;
   onNameClick?: () => void;
@@ -94,19 +117,34 @@ interface CoinRowProps {
 }
 
 const CoinRow = (props: CoinRowProps) => {
-  const meta = createMemo(() => getAssetMeta(props.setting.symbol));
+  const meta = createMemo(() => metaFor(props.assetKey));
   const logoChain = createMemo<string[]>(() => {
     const m = meta();
-    return m ? logoFor(m) : [];
+    return m ? getLogoUrlChain(m) : [];
   });
   const [logoIdx, setLogoIdx] = createSignal(0);
   const currentLogo = createMemo<string | null>(() => {
     const chain = logoChain();
     return chain.length > 0 && logoIdx() < chain.length ? chain[logoIdx()] : null;
   });
-  const snap = createMemo(() => props.getSnapshot(props.setting.symbol));
+  const snap = createMemo(() => props.getSnapshot(props.assetKey));
+  const isUnavailable = createMemo(() => snap()?.quality === 'unavailable');
+  // unavailable 且没有任何缓存价时只显示状态文案，不显示 $0
+  const hasPrice = createMemo(() => {
+    const s = snap();
+    return s != null && s.lastUpdate > 0;
+  });
+  const displaySymbol = createMemo(() => meta()?.symbol ?? assetKeySymbol(props.assetKey));
 
   let mouseDownPos: { x: number; y: number } | null = null;
+
+  const isClick = (e: MouseEvent): boolean => {
+    if (!mouseDownPos) return true;
+    const dx = Math.abs(e.clientX - mouseDownPos.x);
+    const dy = Math.abs(e.clientY - mouseDownPos.y);
+    mouseDownPos = null;
+    return dx <= DRAG_THRESHOLD && dy <= DRAG_THRESHOLD;
+  };
 
   const handleMouseDown = (e: MouseEvent) => {
     mouseDownPos = { x: e.clientX, y: e.clientY };
@@ -114,29 +152,11 @@ const CoinRow = (props: CoinRowProps) => {
 
   const handleNameClick = (e: MouseEvent) => {
     e.stopPropagation();
-    if (mouseDownPos) {
-      const dx = Math.abs(e.clientX - mouseDownPos.x);
-      const dy = Math.abs(e.clientY - mouseDownPos.y);
-      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
-        mouseDownPos = null;
-        return;
-      }
-    }
-    mouseDownPos = null;
-    props.onNameClick?.();
+    if (isClick(e)) props.onNameClick?.();
   };
 
   const handleRowClick = (e: MouseEvent) => {
-    if (mouseDownPos) {
-      const dx = Math.abs(e.clientX - mouseDownPos.x);
-      const dy = Math.abs(e.clientY - mouseDownPos.y);
-      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
-        mouseDownPos = null;
-        return;
-      }
-    }
-    mouseDownPos = null;
-    props.onRowClick?.();
+    if (isClick(e)) props.onRowClick?.();
   };
 
   return (
@@ -144,11 +164,11 @@ const CoinRow = (props: CoinRowProps) => {
       <div class="price-item__logo">
         <Show
           when={currentLogo()}
-          fallback={<span class="price-item__logo-fallback">{props.setting.symbol[0]}</span>}
+          fallback={<span class="price-item__logo-fallback">{displaySymbol()[0]}</span>}
         >
           <img
             src={currentLogo()!}
-            alt={props.setting.symbol}
+            alt={displaySymbol()}
             class="price-item__logo-img"
             onError={() => {
               // 按 chain 顺序换下一个 URL；最后一个也失败则进入 fallback 占位
@@ -160,20 +180,25 @@ const CoinRow = (props: CoinRowProps) => {
         </Show>
       </div>
       <div class="price-item__main price-item__main--clickable" onClick={handleNameClick}>
-        <span class="price-item__symbol">{props.setting.symbol}</span>
+        <span class="price-item__symbol">{displaySymbol()}</span>
         <span class="price-item__name">{props.setting.name}</span>
       </div>
       <Show
-        when={snap() != null}
+        when={hasPrice()}
         fallback={
           <div class="price-item__values">
             <span class="price-item__loading">
-              {props.isDataLate ? '数据源重试中' : '价格获取中'}
+              {isUnavailable() ? '暂无可用市场' : props.isDataLate ? '数据源重试中' : '价格获取中'}
             </span>
           </div>
         }
       >
-        <PriceDisplay snapshot={snap()!} now={props.now} />
+        <div class="price-item__values-wrap">
+          <PriceDisplay snapshot={snap()!} now={props.now} />
+          <Show when={isUnavailable()}>
+            <span class="price-item__notice">暂无可用市场</span>
+          </Show>
+        </div>
       </Show>
     </div>
   );
@@ -189,26 +214,14 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   const getSettings = (): WatchlistSettings => {
     const settings = props.state?.settings as WatchlistSettings | undefined;
     if (settings?.coins && Array.isArray(settings.coins) && settings.coins.length > 0) {
-      // 兼容旧格式（{symbol:'BTCUSDT', baseAsset:'BTC'}）
-      const migrated: WatchlistCoinSetting[] = settings.coins.map((c) => {
-        const anyC = c as unknown as {
-          symbol: string;
-          baseAsset?: string;
-          name: string;
-          category?: WatchlistCoinSetting['category'];
-        };
-        if (anyC.category) return c as WatchlistCoinSetting;
-        const sym = anyC.baseAsset ?? anyC.symbol;
-        return { symbol: sym, name: anyC.name, category: 'crypto' };
-      });
-      return { coins: migrated };
+      return { coins: settings.coins.map(migrateSetting) };
     }
     return { ...DEFAULT_WATCHLIST_SETTINGS };
   };
 
   const initialSettings = getSettings();
   const [coins, setCoins] = createSignal<WatchlistCoinSetting[]>(initialSettings.coins);
-  const [snapshots, setSnapshots] = createSignal<Map<string, PriceSnapshot>>(new Map());
+  const [snapshots, setSnapshots] = createSignal<Map<AssetKey, PriceSnapshot>>(new Map());
   const [isEditDialogOpen, setIsEditDialogOpen] = createSignal(false);
   const [editSlotIndex, setEditSlotIndex] = createSignal<number | undefined>(undefined);
   const [loadStartedAt, setLoadStartedAt] = createSignal(Date.now());
@@ -216,8 +229,12 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
 
   const { ContextMenuComponent, showContextMenu } = useContextMenu();
 
-  const getSnapshot = (symbol: string): PriceSnapshot | null => {
-    return snapshots().get(symbol) ?? null;
+  const assetKeys = createMemo<AssetKey[]>(() =>
+    coins().map((coin) => assetKeyFromSetting(coin) ?? `crypto:${coin.symbol.toUpperCase()}`),
+  );
+
+  const getSnapshot = (assetKey: AssetKey): PriceSnapshot | null => {
+    return snapshots().get(assetKey) ?? null;
   };
 
   const saveSettings = (next: WatchlistCoinSetting[]) => {
@@ -228,20 +245,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
     });
   };
 
-  // 当前订阅 unsubscribe
-  let unsubscribe: (() => void) | null = null;
-
-  const subscribeToService = () => {
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
-    }
-    const symbols = new Set(coins().map((c) => c.symbol));
-    setLoadStartedAt(Date.now());
-    unsubscribe = priceService.subscribe(symbols, (snap) => {
-      setSnapshots(new Map(snap));
-    });
-  };
+  let subscription: PriceSubscription | null = null;
 
   const handleEditConfirm = (slotIndex: number, asset: AssetMeta) => {
     const next = coins().slice();
@@ -249,11 +253,10 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
       symbol: asset.symbol,
       name: asset.name,
       category: asset.category,
+      assetKey: `${asset.category}:${asset.symbol.toUpperCase()}`,
     };
     setCoins(next);
     saveSettings(next);
-    subscribeToService();
-    void priceService.refresh(new Set([asset.symbol]));
   };
 
   const handleCoinNameClick = (idx: number) => {
@@ -262,12 +265,11 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   };
 
   const handleRowClick = (idx: number) => {
-    const setting = coins()[idx];
-    if (!setting) return;
-    const meta = getAssetMeta(setting.symbol);
+    const key = assetKeys()[idx];
+    if (!key) return;
+    const meta = metaFor(key);
     if (!meta) return;
-    const url = getDetailUrl(meta);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(getDetailUrl(meta), '_blank', 'noopener,noreferrer');
   };
 
   const handleContextMenu = (e: MouseEvent) => {
@@ -277,7 +279,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
       {
         label: '刷新价格',
         action: () => {
-          void priceService.refresh();
+          void priceService.refreshAssets(new Set(assetKeys()));
         },
       },
     ];
@@ -297,14 +299,24 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   const rowCount = createMemo(() => Math.max(coins().length, 1));
   const isDataLate = createMemo(() => now() - loadStartedAt() > MISSING_PRICE_RETRY_DELAY_MS);
 
+  // 换币只更新稳定 handle 的 AssetKey 集合；PriceService 会立即 targeted 刷新新资产
+  createEffect(() => {
+    const keys = new Set(assetKeys());
+    if (!subscription) return;
+    setLoadStartedAt(Date.now());
+    subscription.updateAssets(keys);
+  });
+
   onMount(() => {
-    subscribeToService();
+    subscription = priceService.subscribe(new Set(assetKeys()), (next) => {
+      setSnapshots(new Map(next));
+    });
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 30000);
     onCleanup(() => {
-      unsubscribe?.();
-      unsubscribe = null;
+      subscription?.unsubscribe();
+      subscription = null;
       clearInterval(timer);
     });
   });
@@ -320,6 +332,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           {(coinFn, index) => (
             <CoinRow
               setting={coinFn()}
+              assetKey={assetKeys()[index]}
               getSnapshot={getSnapshot}
               isDataLate={isDataLate()}
               now={now()}
@@ -397,6 +410,10 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
           font-size: 10px; color: var(--text-tertiary); line-height: 1;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
+        .price-item__values-wrap {
+          display: flex; flex-direction: column; align-items: flex-end;
+          margin-left: auto;
+        }
         .price-item__values {
           display: flex; flex-direction: column;
           justify-content: center; align-items: flex-end;
@@ -420,6 +437,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
         .price-item__change.up { color: var(--green-up); }
         .price-item__change.down { color: var(--red-down); }
         .price-item__loading { font-size: 11px; color: var(--text-tertiary); }
+        .price-item__notice { font-size: 9px; color: var(--text-tertiary); line-height: 1; }
         .price-item__logo {
           width: 20px; height: 20px;
           display: flex; align-items: center; justify-content: center;
@@ -442,3 +460,16 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
     </div>
   );
 };
+
+/** 兼容旧格式：{symbol:'BTCUSDT', baseAsset:'BTC'} 与 category+symbol，统一补上 assetKey */
+function migrateSetting(coin: WatchlistCoinSetting): WatchlistCoinSetting {
+  const key = assetKeyFromSetting(coin);
+  if (!key) return coin;
+  const meta = getCuratedAsset(key);
+  return {
+    symbol: meta?.symbol ?? assetKeySymbol(key),
+    name: meta?.name ?? coin.name ?? assetKeySymbol(key),
+    category: meta?.category ?? coin.category ?? 'crypto',
+    assetKey: key,
+  };
+}

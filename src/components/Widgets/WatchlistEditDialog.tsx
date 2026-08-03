@@ -2,16 +2,16 @@
  * Watchlist 编辑对话框
  * 用于替换 watchlist 中的单个资产槽位
  *
- * 数据源：static ASSETS（src/services/prices/assets.ts）
- *  - All / Crypto / US Stocks / ETF / FX / Commodity 类别 tab
- *  - 模糊搜索：symbol / name 包含 query
- *  - 默认按 rank 升序展示
+ * 数据源：curated ASSETS + exchange market catalog
+ *  - 打开时立即展示 curated / 已缓存条目，同时后台刷新过期的 exchange catalog
+ *  - 搜索输入不发任何网络请求，全部是本地查询
+ *  - 只有至少存在一个 live instrument 的资产才允许被选中
  */
 
-import { Show, For, createSignal, createMemo, createEffect } from 'solid-js';
+import { Show, For, createSignal, createMemo, createEffect, onCleanup } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { ASSETS, getLogoUrlChain } from '../../services/prices/assets';
-import { dynamicCatalog } from '../../services/prices/dynamicCatalog';
+import { getLogoUrlChain } from '../../services/prices/assets';
+import { exchangeCatalog, type CatalogEntry } from '../../services/prices/exchangeCatalog';
 import type { AssetMeta, AssetCategory } from '../../services/prices/types';
 
 export interface WatchlistSlot {
@@ -74,45 +74,29 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
   const [activeCategory, setActiveCategory] = createSignal<AssetCategory | 'all'>('all');
   let inputRef: HTMLInputElement | undefined;
 
-  // 用一个 signal 触发 dynamicCatalog 加载完成后重渲染
-  const [dynamicReady, setDynamicReady] = createSignal(dynamicCatalog.isLoaded());
+  // catalog 后台刷新完成后翻一下版本号让 memo 重算
+  const [catalogVersion, setCatalogVersion] = createSignal(0);
+  const [isRefreshing, setIsRefreshing] = createSignal(false);
+  onCleanup(exchangeCatalog.onUpdate(() => setCatalogVersion((v) => v + 1)));
 
-  const visibleAssets = createMemo<AssetMeta[]>(() => {
-    dynamicReady(); // 强依赖触发 memo 重算
-    const cat = activeCategory();
-    const q = searchQuery().trim().toLowerCase();
-
-    // 第一层：curated ASSETS（按 rank 排序，作为默认推荐）
-    let curated: AssetMeta[] = ASSETS;
-    if (cat !== 'all') curated = curated.filter((a) => a.category === cat);
-    if (q) {
-      curated = curated.filter(
-        (a) => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q),
-      );
-    }
-    curated = curated.slice().sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
-
-    // 第二层：动态 Pyth catalog（仅在搜索时合并；空 query 保持默认列表干净）
-    if (!q) return curated;
-    const dynResults = dynamicCatalog.search(q, cat);
-    if (dynResults.length === 0) return curated;
-    const seen = new Set(curated.map((a) => a.symbol));
-    const extras = dynResults.filter((a) => !seen.has(a.symbol));
-    return [...curated, ...extras];
+  // 纯本地查询：输入字符不触发任何网络请求
+  const visibleAssets = createMemo<CatalogEntry[]>(() => {
+    catalogVersion();
+    return exchangeCatalog.search(searchQuery(), activeCategory());
   });
 
-  // 对话框打开时复位 + 触发动态 catalog 加载
+  // 打开弹窗是 catalog 网络请求唯一的正常触发时机
   createEffect(() => {
-    if (props.isOpen) {
-      setSearchQuery('');
-      setSelectedIndex(0);
-      setActiveCategory('all');
-      setTimeout(() => inputRef?.focus(), 100);
-      // 异步加载动态目录；加载完后翻一下 dynamicReady 让 memo 重算
-      void dynamicCatalog.ensureLoaded().then(() => {
-        if (dynamicCatalog.isLoaded()) setDynamicReady(true);
-      });
-    }
+    if (!props.isOpen) return;
+    setSearchQuery('');
+    setSelectedIndex(0);
+    setActiveCategory('all');
+    setTimeout(() => inputRef?.focus(), 100);
+    setIsRefreshing(!exchangeCatalog.isFresh());
+    void exchangeCatalog.ensureFresh().finally(() => {
+      setCatalogVersion((v) => v + 1);
+      setIsRefreshing(false);
+    });
   });
 
   // 搜索改变时重置 index
@@ -145,7 +129,7 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const sel = list[selectedIndex()];
-      if (sel) handleSelect(sel);
+      if (sel && sel.selectable) handleSelect(sel.meta);
     }
   };
 
@@ -223,25 +207,34 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
               onTouchMove={handleTouchMove}
             >
               <For each={visibleAssets()}>
-                {(asset, idx) => (
+                {(entry, idx) => (
                   <div
-                    class={`watchlist-edit-dialog__coin-item ${selectedIndex() === idx() ? 'selected' : ''}`}
-                    onClick={() => handleSelect(asset)}
+                    classList={{
+                      'watchlist-edit-dialog__coin-item': true,
+                      selected: selectedIndex() === idx(),
+                      'watchlist-edit-dialog__coin-item--disabled': !entry.selectable,
+                    }}
+                    onClick={() => entry.selectable && handleSelect(entry.meta)}
                     onMouseEnter={() => setSelectedIndex(idx())}
                   >
                     <div class="watchlist-edit-dialog__coin-logo-container">
-                      <AssetLogo asset={asset} />
+                      <AssetLogo asset={entry.meta} />
                     </div>
                     <div class="watchlist-edit-dialog__coin-info">
-                      <span class="watchlist-edit-dialog__coin-symbol">{asset.symbol}</span>
-                      <span class="watchlist-edit-dialog__coin-name">{asset.name}</span>
+                      <span class="watchlist-edit-dialog__coin-symbol">{entry.meta.symbol}</span>
+                      <span class="watchlist-edit-dialog__coin-name">{entry.meta.name}</span>
                     </div>
-                    <span class="watchlist-edit-dialog__coin-tag">{asset.category}</span>
+                    <Show when={!entry.selectable}>
+                      <span class="watchlist-edit-dialog__coin-status">暂无公开行情</span>
+                    </Show>
+                    <span class="watchlist-edit-dialog__coin-tag">{entry.meta.category}</span>
                   </div>
                 )}
               </For>
               <Show when={visibleAssets().length === 0}>
-                <div class="watchlist-edit-dialog__empty">未找到匹配资产</div>
+                <div class="watchlist-edit-dialog__empty">
+                  {isRefreshing() ? '正在加载交易所标的…' : '未找到匹配资产'}
+                </div>
               </Show>
             </div>
           </div>
@@ -346,6 +339,12 @@ export const WatchlistEditDialog = (props: WatchlistEditDialogProps) => {
           .watchlist-edit-dialog__coin-name {
             font-size: 11px; color: var(--text-tertiary);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          }
+          .watchlist-edit-dialog__coin-item--disabled {
+            opacity: 0.45; cursor: not-allowed;
+          }
+          .watchlist-edit-dialog__coin-status {
+            font-size: 10px; color: var(--text-tertiary); white-space: nowrap;
           }
           .watchlist-edit-dialog__coin-tag {
             font-size: 10px; color: var(--text-tertiary);

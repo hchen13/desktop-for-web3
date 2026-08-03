@@ -1,5 +1,5 @@
 /**
- * Exchange market catalog —— 取代原来的 Pyth dynamic catalog
+ * Exchange market catalog —— 交易所公开 instrument 目录
  *
  * 唯一的正常远程触发时机是 WatchlistEditDialog 打开（`ensureFresh`）。页面启动、
  * PriceService 启动、周期报价 timer 只允许读本地缓存（`loadCachedOnly`）。
@@ -212,11 +212,17 @@ class ExchangeCatalog {
     ].slice(0, 200);
   }
 
-  /** 供 PriceService 在冷启动时把 catalog mapping 写回缓存 */
+  /**
+   * 供 PriceService 在冷启动时把验证过的 candidate mapping 写回缓存。
+   *
+   * 这些 mapping 只覆盖当前 selected 的几个资产，不构成一次完整 catalog 预热，
+   * 因此不能推进 timestamp——否则 isFresh() 会误判成 fresh，搜索弹窗 24 小时内
+   * 都拉不到完整的交易所标的列表。
+   */
   async mergeResolvedInstruments(instruments: VenueInstrument[]): Promise<void> {
     if (instruments.length === 0) return;
     const merged = dedupeInstruments([...this.allInstruments(), ...instruments]);
-    this.apply(merged, this.timestamp || Date.now());
+    this.apply(merged, this.timestamp);
     await this.writeCache();
   }
 

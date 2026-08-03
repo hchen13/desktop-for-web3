@@ -10,6 +10,7 @@
  */
 
 import type { VenueInstrument, VenueQuote } from '../types';
+import type { SocketEndpoint } from '../socket';
 import {
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
@@ -56,10 +57,7 @@ export interface OkxRawCatalog {
 }
 
 export async function fetchOkxRawCatalog(): Promise<OkxRawCatalog> {
-  const [spot, swap] = await Promise.all([
-    fetchInstruments('SPOT'),
-    fetchInstruments('SWAP'),
-  ]);
+  const [spot, swap] = await Promise.all([fetchInstruments('SPOT'), fetchInstruments('SWAP')]);
   return { spot, swap };
 }
 
@@ -270,12 +268,16 @@ export function normalizeOkxIndexTicker(
   });
 }
 
+export function isOkxSpotProduct(instrument: VenueInstrument): boolean {
+  return (
+    instrument.productKind === 'crypto_spot' || instrument.productKind === 'tokenized_stock_spot'
+  );
+}
+
 export async function fetchOkxQuotes(instruments: VenueInstrument[]): Promise<VenueQuote[]> {
   return settleAll(
     instruments.map(async (instrument) => {
-      const isPerp = instrument.productKind !== 'crypto_spot' &&
-        instrument.productKind !== 'tokenized_stock_spot';
-      if (isPerp) {
+      if (!isOkxSpotProduct(instrument)) {
         const json = await fetchJson<OkxResponse<OkxIndexTicker>>(
           okxIndexTickerUrl(okxIndexInstId(instrument.instrumentId)),
         );
@@ -287,4 +289,57 @@ export async function fetchOkxQuotes(instruments: VenueInstrument[]): Promise<Ve
       return row ? normalizeOkxSpotTicker(instrument, row) : null;
     }),
   );
+}
+
+// ============ WebSocket ============
+
+/**
+ * 一条连接同时承载 tickers（现货）与 index-tickers（股票永续官方指数）。
+ * 不用永续 last 冒充 index。
+ */
+export const okxSocketEndpoint: SocketEndpoint = {
+  key: 'okx',
+  venue: 'okx',
+  url: OKX_WS_URL,
+  supports: () => true,
+  buildSubscribe: (instruments) => [{ op: 'subscribe', args: instruments.map(subscriptionArg) }],
+  buildUnsubscribe: (instruments) => [
+    { op: 'unsubscribe', args: instruments.map(subscriptionArg) },
+  ],
+  parseMessage: (data, instruments) => {
+    if (!data || data[0] !== '{') return [];
+    const json = JSON.parse(data) as {
+      arg?: { channel?: string; instId?: string };
+      data?: unknown[];
+      event?: string;
+    };
+    if (json.event || !json.arg?.channel || !json.arg.instId || !Array.isArray(json.data)) {
+      return [];
+    }
+    const channel = json.arg.channel;
+    const instId = json.arg.instId;
+    const out: VenueQuote[] = [];
+    for (const instrument of instruments) {
+      const matches =
+        channel === 'tickers'
+          ? instrument.instrumentId === instId
+          : channel === 'index-tickers' && okxIndexInstId(instrument.instrumentId) === instId;
+      if (!matches) continue;
+      for (const row of json.data) {
+        const quote =
+          channel === 'tickers'
+            ? normalizeOkxSpotTicker(instrument, row as OkxTicker)
+            : normalizeOkxIndexTicker(instrument, row as OkxIndexTicker);
+        if (quote) out.push(quote);
+      }
+    }
+    return out;
+  },
+  heartbeat: { intervalMs: 25_000, payload: () => 'ping' },
+};
+
+function subscriptionArg(instrument: VenueInstrument): { channel: string; instId: string } {
+  return isOkxSpotProduct(instrument)
+    ? { channel: 'tickers', instId: instrument.instrumentId }
+    : { channel: 'index-tickers', instId: okxIndexInstId(instrument.instrumentId) };
 }

@@ -151,9 +151,10 @@ export function makeQuote(
 ): VenueQuote | null {
   if (!Number.isFinite(params.price) || params.price <= 0) return null;
   const now = params.receivedAt ?? Date.now();
-  const ts = Number.isFinite(params.sourceTimestamp) && params.sourceTimestamp > 0
-    ? params.sourceTimestamp
-    : now;
+  const ts =
+    Number.isFinite(params.sourceTimestamp) && params.sourceTimestamp > 0
+      ? params.sourceTimestamp
+      : now;
   return {
     assetKey: instrument.assetKey,
     venue: instrument.venue,

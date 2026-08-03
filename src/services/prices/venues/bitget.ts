@@ -10,6 +10,7 @@
  */
 
 import type { AssetCategory, VenueInstrument, VenueQuote } from '../types';
+import type { SocketEndpoint } from '../socket';
 import {
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
@@ -290,3 +291,52 @@ export async function fetchBitgetQuotes(instruments: VenueInstrument[]): Promise
     }),
   );
 }
+
+// ============ WebSocket ============
+
+/** WS 的 instType 用小写，与 REST 的 category 不是同一套写法 */
+export function bitgetWsInstType(instrument: VenueInstrument): string {
+  return bitgetCategoryFor(instrument) === BITGET_SPOT_CATEGORY ? 'spot' : 'usdt-futures';
+}
+
+function subscriptionArg(instrument: VenueInstrument) {
+  return {
+    instType: bitgetWsInstType(instrument),
+    topic: 'ticker',
+    symbol: instrument.instrumentId,
+  };
+}
+
+export const bitgetSocketEndpoint: SocketEndpoint = {
+  key: 'bitget',
+  venue: 'bitget',
+  url: BITGET_WS_URL,
+  supports: () => true,
+  buildSubscribe: (instruments) => [{ op: 'subscribe', args: instruments.map(subscriptionArg) }],
+  buildUnsubscribe: (instruments) => [
+    { op: 'unsubscribe', args: instruments.map(subscriptionArg) },
+  ],
+  parseMessage: (data, instruments) => {
+    if (!data || data[0] !== '{') return [];
+    const json = JSON.parse(data) as {
+      event?: string;
+      arg?: { instType?: string; topic?: string; symbol?: string };
+      data?: BitgetTicker[];
+      ts?: number;
+    };
+    if (json.event || json.arg?.topic !== 'ticker' || !Array.isArray(json.data)) return [];
+    const symbol = json.arg.symbol;
+    const instType = json.arg.instType;
+    const out: VenueQuote[] = [];
+    for (const instrument of instruments) {
+      if (instrument.instrumentId !== symbol) continue;
+      if (bitgetWsInstType(instrument) !== instType) continue;
+      for (const row of json.data) {
+        const quote = normalizeBitgetTicker(instrument, { ts: String(json.ts ?? ''), ...row });
+        if (quote) out.push(quote);
+      }
+    }
+    return out;
+  },
+  heartbeat: { intervalMs: 25_000, payload: () => 'ping' },
+};

@@ -45,6 +45,10 @@ export interface WatchlistCoinSetting {
   name: string;
   /** 资产类别 */
   category: 'crypto' | 'stock' | 'etf' | 'fx' | 'commodity';
+  /** `${category}:${SYMBOL}`；旧配置没有这个字段时由 assetKeyFromSetting 推导 */
+  assetKey?: string;
+  /** 更老的格式遗留字段，只用于迁移 */
+  baseAsset?: string;
 }
 
 /** Watchlist 设置 */
@@ -122,12 +126,12 @@ export const DEFAULT_CALENDAR_SETTINGS: CalendarSettings = {
 
 export const DEFAULT_WATCHLIST_SETTINGS: WatchlistSettings = {
   coins: [
-    { symbol: 'BTC', name: 'Bitcoin', category: 'crypto' },
-    { symbol: 'ETH', name: 'Ethereum', category: 'crypto' },
-    { symbol: 'SOL', name: 'Solana', category: 'crypto' },
-    { symbol: 'NVDA', name: 'NVIDIA', category: 'stock' },
-    { symbol: 'TSLA', name: 'Tesla', category: 'stock' },
-    { symbol: 'SPY', name: 'SPDR S&P 500', category: 'etf' },
+    { symbol: 'BTC', name: 'Bitcoin', category: 'crypto', assetKey: 'crypto:BTC' },
+    { symbol: 'ETH', name: 'Ethereum', category: 'crypto', assetKey: 'crypto:ETH' },
+    { symbol: 'SOL', name: 'Solana', category: 'crypto', assetKey: 'crypto:SOL' },
+    { symbol: 'NVDA', name: 'NVIDIA', category: 'stock', assetKey: 'stock:NVDA' },
+    { symbol: 'TSLA', name: 'Tesla', category: 'stock', assetKey: 'stock:TSLA' },
+    { symbol: 'SPY', name: 'SPDR S&P 500', category: 'etf', assetKey: 'etf:SPY' },
   ],
 };
 

@@ -6,7 +6,7 @@
  * 请求全市场 catalog 或全市场 ticker。
  */
 
-import type { AssetCategory, AssetKey, AssetMeta, VenueInstrument } from './types';
+import type { AssetCategory, AssetKey, AssetMeta, ProductKind, VenueInstrument } from './types';
 import { assetKeyCategory, migrateAssetKey, venueSymbol } from './assetKey';
 import { getCuratedAsset } from './assets';
 import { exchangeCatalog } from './exchangeCatalog';
@@ -21,7 +21,11 @@ import { equityCategoryFor, makeInstrument } from './venues/shared';
 export type SourceTier = 1 | 2 | 3;
 
 export function instrumentTier(instrument: VenueInstrument): SourceTier {
-  switch (instrument.productKind) {
+  return productTier(instrument.productKind);
+}
+
+export function productTier(productKind: ProductKind): SourceTier {
+  switch (productKind) {
     case 'crypto_spot':
     case 'tokenized_stock_spot':
       return 1;
@@ -50,7 +54,9 @@ export function candidateInstruments(assetKey: AssetKey, tier: SourceTier): Venu
 
   if (category === 'crypto') return tier === 1 ? cryptoSpotCandidates(meta) : [];
   if (category === 'stock' || category === 'etf') {
-    return tier === 1 ? tokenizedSpotCandidates(key, category) : equityPerpCandidates(key, category);
+    return tier === 1
+      ? tokenizedSpotCandidates(key, category)
+      : equityPerpCandidates(key, category);
   }
   if (category === 'commodity') return tier === 2 ? commodityPerpCandidates(key) : [];
   // FX 没有任何经过 metadata 验证的公开产品，宁可 unavailable 也不猜

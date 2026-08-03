@@ -17,8 +17,6 @@ export interface AssetMeta {
   name: string;
   /** 资产类别 */
   category: AssetCategory;
-  /** Pyth Hermes feed_id（64 hex，0x 前缀）；随旧 Pyth 运行链一起删除 */
-  pythFeedId?: string | null;
   /** CEX 上的对名，仅 crypto 有意义 */
   cexPair?: { base: string; quote: string };
   /** logo slug（用于 coincap 等图源 URL 拼接） */

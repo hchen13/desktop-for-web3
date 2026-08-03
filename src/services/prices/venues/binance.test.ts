@@ -51,40 +51,62 @@ describe('Binance bStocks 保守确认', () => {
   it.each(['BNB', 'SHIB', 'ARB', 'TRB', 'CKB', 'DGB', 'BB', 'YB'])(
     '普通以 B 结尾的 crypto %s 不被误判成 bStock',
     (base) => {
-      expect(resolveBinanceStockSymbol(spotSymbol(base), confirmed.confirmedEquitySymbols)).toBeNull();
+      expect(
+        resolveBinanceStockSymbol(spotSymbol(base), confirmed.confirmedEquitySymbols),
+      ).toBeNull();
       const out = buildBinanceInstruments(raw({ spot: [spotSymbol(base)] }), confirmed);
       expect(out[0]).toMatchObject({ assetKey: `crypto:${base}`, productKind: 'crypto_spot' });
     },
   );
 
   it('未被任何交易所 metadata 确认的 symbol 不加入股票 catalog', () => {
-    expect(resolveBinanceStockSymbol(spotSymbol('FOOB'), confirmed.confirmedEquitySymbols)).toBeNull();
+    expect(
+      resolveBinanceStockSymbol(spotSymbol('FOOB'), confirmed.confirmedEquitySymbols),
+    ).toBeNull();
   });
 
   it('instrumentId 与 bStock 命名不一致时拒绝', () => {
-    const weird = { symbol: 'NVDA-BUSDT', baseAsset: 'NVDAB', quoteAsset: 'USDT', status: 'TRADING' };
+    const weird = {
+      symbol: 'NVDA-BUSDT',
+      baseAsset: 'NVDAB',
+      quoteAsset: 'USDT',
+      status: 'TRADING',
+    };
     expect(resolveBinanceStockSymbol(weird, confirmed.confirmedEquitySymbols)).toBeNull();
   });
 
   it('非 TRADING 状态不收录', () => {
     expect(
-      resolveBinanceStockSymbol(spotSymbol('NVDAB', 'USDT', 'BREAK'), confirmed.confirmedEquitySymbols),
+      resolveBinanceStockSymbol(
+        spotSymbol('NVDAB', 'USDT', 'BREAK'),
+        confirmed.confirmedEquitySymbols,
+      ),
     ).toBeNull();
   });
 
   it('不支持的计价货币不收录', () => {
-    expect(resolveBinanceStockSymbol(spotSymbol('NVDAB', 'TRY'), confirmed.confirmedEquitySymbols)).toBeNull();
+    expect(
+      resolveBinanceStockSymbol(spotSymbol('NVDAB', 'TRY'), confirmed.confirmedEquitySymbols),
+    ).toBeNull();
   });
 
   it('MU 的 bStock 是 MUB，不会被当成同名 crypto', () => {
-    expect(resolveBinanceStockSymbol(spotSymbol('MUB'), confirmed.confirmedEquitySymbols)).toBe('MU');
+    expect(resolveBinanceStockSymbol(spotSymbol('MUB'), confirmed.confirmedEquitySymbols)).toBe(
+      'MU',
+    );
   });
 });
 
 describe('Binance TradFi 永续', () => {
   it('只接受 contractType=TRADIFI_PERPETUAL 且 underlyingType=EQUITY', () => {
     const out = buildBinanceInstruments(
-      raw({ futures: [tradfiPerp('BRKB'), tradfiPerp('HK0700', 'HK_EQUITY'), tradfiPerp('OPENAI', 'PREMARKET')] }),
+      raw({
+        futures: [
+          tradfiPerp('BRKB'),
+          tradfiPerp('HK0700', 'HK_EQUITY'),
+          tradfiPerp('OPENAI', 'PREMARKET'),
+        ],
+      }),
       ctx(['BRKB']),
     );
     expect(out).toHaveLength(1);
@@ -129,9 +151,11 @@ describe('Binance TradFi 永续', () => {
   });
 
   it('EQUITY 永续贡献股票确认集合', () => {
-    expect(collectBinanceEquitySymbols(raw({ futures: [tradfiPerp('BRKB'), tradfiPerp('XAU', 'COMMODITY')] }))).toEqual([
-      'BRKB',
-    ]);
+    expect(
+      collectBinanceEquitySymbols(
+        raw({ futures: [tradfiPerp('BRKB'), tradfiPerp('XAU', 'COMMODITY')] }),
+      ),
+    ).toEqual(['BRKB']);
   });
 });
 

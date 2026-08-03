@@ -13,6 +13,7 @@
  */
 
 import type { VenueInstrument, VenueQuote } from '../types';
+import type { SocketEndpoint } from '../socket';
 import {
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
@@ -30,7 +31,6 @@ import {
 const SPOT_REST_BASE = 'https://data-api.binance.vision';
 const FUTURES_REST_BASE = 'https://fapi.binance.com';
 export const BINANCE_SPOT_WS_URL = 'wss://stream.binance.com:9443/ws';
-export const BINANCE_FUTURES_WS_URL = 'wss://fstream.binance.com/ws';
 
 const TRADFI_CONTRACT_TYPE = 'TRADIFI_PERPETUAL';
 /** 明确的股票类 underlyingType；KR/HK/PREMARKET 不纳入本项目的美股资产模型 */
@@ -301,4 +301,64 @@ export async function fetchBinanceQuotes(instruments: VenueInstrument[]): Promis
 
   const settled = await settleAll(tasks);
   return settled.flat();
+}
+
+// ============ WebSocket ============
+
+/**
+ * 只开 Spot 一条连接。
+ *
+ * Futures 侧的 `<symbol>@markPrice` / `<symbol>@ticker` stream 经实测不推送数据，
+ * 因此 TradFi 永续改由 targeted REST（premiumIndex + 单 symbol 24hr ticker）供给，
+ * 由 PriceService 的 WS 未覆盖兜底刷新负责保持时效。
+ */
+export const binanceSpotSocketEndpoint: SocketEndpoint = {
+  key: 'binance-spot',
+  venue: 'binance',
+  url: BINANCE_SPOT_WS_URL,
+  supports: (instrument) =>
+    instrument.productKind === 'crypto_spot' || instrument.productKind === 'tokenized_stock_spot',
+  buildSubscribe: (instruments) => [
+    {
+      method: 'SUBSCRIBE',
+      params: instruments.map((i) => `${i.instrumentId.toLowerCase()}@ticker`),
+      id: nextRequestId(),
+    },
+  ],
+  buildUnsubscribe: (instruments) => [
+    {
+      method: 'UNSUBSCRIBE',
+      params: instruments.map((i) => `${i.instrumentId.toLowerCase()}@ticker`),
+      id: nextRequestId(),
+    },
+  ],
+  parseMessage: (data, instruments) => {
+    if (!data || data[0] !== '{') return [];
+    const json = JSON.parse(data) as {
+      e?: string;
+      s?: string;
+      c?: string;
+      P?: string;
+      q?: string;
+      E?: number;
+      C?: number;
+    };
+    if (json.e !== '24hrTicker' || !json.s) return [];
+    const instrument = instruments.find((i) => i.instrumentId === json.s);
+    if (!instrument) return [];
+    const quote = normalizeBinanceSpotTicker(instrument, {
+      symbol: json.s,
+      lastPrice: json.c,
+      priceChangePercent: json.P,
+      quoteVolume: json.q,
+      closeTime: json.C ?? json.E,
+    });
+    return quote ? [quote] : [];
+  },
+};
+
+let requestId = 0;
+function nextRequestId(): number {
+  requestId += 1;
+  return requestId;
 }

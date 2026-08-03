@@ -1,12 +1,13 @@
 /**
  * Rate Monitor 服务
- * 
- * 数据源优先级:
- * 1. 方案A: CoinGecko (默认，一次获取所有数据)
- * 2. Fallback:
- *    - KRW: 方案C (Upbit 直接获取 KRW-USDT/USDC)
- *    - 其他: 方案B (Pyth 获取法币汇率 + 计算)
- * 
+ *
+ * 数据源:
+ * 1. CoinGecko (主源，一次获取所有法币)
+ * 2. Upbit (仅补 KRW-USDT/USDC)
+ *
+ * CoinGecko 失败且 JPY/CNY 没有新值时保留上一轮缓存并标记 degraded，
+ * 绝不把「缺少数据」伪装成 live。
+ *
  * 缓存策略:
  * - 使用 localStorage 持久化
  * - 缓存只用于立即渲染，不影响数据获取时机
@@ -25,7 +26,6 @@ import type {
   RateUpdateCallback,
   CoinGeckoSimplePriceResponse,
   UpbitTickerResponse,
-  PythPriceResponse,
 } from './types';
 
 // ==================== 配置常量 ====================
@@ -42,14 +42,6 @@ const DEFAULT_POLL_INTERVAL = 10 * 60 * 1000;
 /** API 端点 */
 const COINGECKO_API = 'https://api.coingecko.com/api/v3/simple/price';
 const UPBIT_API = 'https://api.upbit.com/v1/ticker';
-const PYTH_HERMES_API = 'https://hermes.pyth.network/v2/updates/price/latest';
-
-/** Pyth Price Feed IDs */
-const PYTH_FEED_IDS = {
-  'USD/JPY': 'ef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52',
-  'USD/CNY': '4a134870158ad1ea98bc4e4eb8e4ca824a32e69d4f3da380377c09936ba23954',
-  'USD/KRW': 'e539120487c29b4defdf9a53d337316ea022a2688978a468f9efd847201be7e3',
-};
 
 // ==================== 工具函数 ====================
 
@@ -127,16 +119,40 @@ async function fetchFromCoinGecko(): Promise<AllRates | null> {
     if (data.tether) {
       const t = data.tether;
       if (t.usd !== undefined) {
-        rates.USDT.USD = { stablecoin: 'USDT', fiat: 'USD', rate: t.usd, updatedAt: now, source: 'coingecko' };
+        rates.USDT.USD = {
+          stablecoin: 'USDT',
+          fiat: 'USD',
+          rate: t.usd,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
       if (t.cny !== undefined) {
-        rates.USDT.CNY = { stablecoin: 'USDT', fiat: 'CNY', rate: t.cny, updatedAt: now, source: 'coingecko' };
+        rates.USDT.CNY = {
+          stablecoin: 'USDT',
+          fiat: 'CNY',
+          rate: t.cny,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
       if (t.jpy !== undefined) {
-        rates.USDT.JPY = { stablecoin: 'USDT', fiat: 'JPY', rate: t.jpy, updatedAt: now, source: 'coingecko' };
+        rates.USDT.JPY = {
+          stablecoin: 'USDT',
+          fiat: 'JPY',
+          rate: t.jpy,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
       if (t.krw !== undefined) {
-        rates.USDT.KRW = { stablecoin: 'USDT', fiat: 'KRW', rate: t.krw, updatedAt: now, source: 'coingecko' };
+        rates.USDT.KRW = {
+          stablecoin: 'USDT',
+          fiat: 'KRW',
+          rate: t.krw,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
     }
 
@@ -144,16 +160,40 @@ async function fetchFromCoinGecko(): Promise<AllRates | null> {
     if (data['usd-coin']) {
       const u = data['usd-coin'];
       if (u.usd !== undefined) {
-        rates.USDC.USD = { stablecoin: 'USDC', fiat: 'USD', rate: u.usd, updatedAt: now, source: 'coingecko' };
+        rates.USDC.USD = {
+          stablecoin: 'USDC',
+          fiat: 'USD',
+          rate: u.usd,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
       if (u.cny !== undefined) {
-        rates.USDC.CNY = { stablecoin: 'USDC', fiat: 'CNY', rate: u.cny, updatedAt: now, source: 'coingecko' };
+        rates.USDC.CNY = {
+          stablecoin: 'USDC',
+          fiat: 'CNY',
+          rate: u.cny,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
       if (u.jpy !== undefined) {
-        rates.USDC.JPY = { stablecoin: 'USDC', fiat: 'JPY', rate: u.jpy, updatedAt: now, source: 'coingecko' };
+        rates.USDC.JPY = {
+          stablecoin: 'USDC',
+          fiat: 'JPY',
+          rate: u.jpy,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
       if (u.krw !== undefined) {
-        rates.USDC.KRW = { stablecoin: 'USDC', fiat: 'KRW', rate: u.krw, updatedAt: now, source: 'coingecko' };
+        rates.USDC.KRW = {
+          stablecoin: 'USDC',
+          fiat: 'KRW',
+          rate: u.krw,
+          updatedAt: now,
+          source: 'coingecko',
+        };
       }
     }
 
@@ -167,7 +207,10 @@ async function fetchFromCoinGecko(): Promise<AllRates | null> {
 
 // ==================== 数据获取 - 方案C: Upbit (KRW) ====================
 
-async function fetchKRWFromUpbit(): Promise<{ USDT: ExchangeRate | null; USDC: ExchangeRate | null }> {
+async function fetchKRWFromUpbit(): Promise<{
+  USDT: ExchangeRate | null;
+  USDC: ExchangeRate | null;
+}> {
   const result: { USDT: ExchangeRate | null; USDC: ExchangeRate | null } = {
     USDT: null,
     USDC: null,
@@ -215,84 +258,6 @@ async function fetchKRWFromUpbit(): Promise<{ USDT: ExchangeRate | null; USDC: E
   return result;
 }
 
-// ==================== 数据获取 - 方案B: Pyth (法币汇率) ====================
-
-async function fetchFiatRatesFromPyth(): Promise<Record<'JPY' | 'CNY' | 'KRW', number | null>> {
-  const result: Record<'JPY' | 'CNY' | 'KRW', number | null> = {
-    JPY: null,
-    CNY: null,
-    KRW: null,
-  };
-
-  try {
-    const ids = [
-      PYTH_FEED_IDS['USD/JPY'],
-      PYTH_FEED_IDS['USD/CNY'],
-      PYTH_FEED_IDS['USD/KRW'],
-    ];
-    const url = `${PYTH_HERMES_API}?${ids.map(id => `ids[]=${id}`).join('&')}`;
-    
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Pyth API error: ${response.status}`);
-    }
-
-    const data: PythPriceResponse = await response.json();
-
-    if (data.parsed) {
-      for (const item of data.parsed) {
-        const price = parseFloat(item.price.price) * Math.pow(10, item.price.expo);
-
-        if (item.id === PYTH_FEED_IDS['USD/JPY']) {
-          result.JPY = price;
-        } else if (item.id === PYTH_FEED_IDS['USD/CNY']) {
-          result.CNY = price;
-        } else if (item.id === PYTH_FEED_IDS['USD/KRW']) {
-          result.KRW = price;
-        }
-      }
-    }
-
-    console.log('[RateMonitor] Pyth fiat rates fetch success');
-  } catch (error) {
-    console.error('[RateMonitor] Pyth fetch failed:', error);
-  }
-
-  return result;
-}
-
-/** 使用 Pyth 法币汇率 + 稳定币/USD 价格计算其他法币汇率 */
-function calculateRatesFromPyth(
-  rates: AllRates,
-  fiatRates: Record<'JPY' | 'CNY' | 'KRW', number | null>
-): AllRates {
-  const now = Date.now();
-  const stablecoins: Stablecoin[] = ['USDT', 'USDC'];
-  const fiats: Array<'JPY' | 'CNY' | 'KRW'> = ['JPY', 'CNY', 'KRW'];
-
-  for (const stable of stablecoins) {
-    const usdRate = rates[stable].USD?.rate ?? 1; // 假设稳定币接近 1 USD
-
-    for (const fiat of fiats) {
-      if (rates[stable][fiat] === null && fiatRates[fiat] !== null) {
-        // STABLE/FIAT = STABLE/USD * USD/FIAT
-        rates[stable][fiat] = {
-          stablecoin: stable,
-          fiat,
-          rate: usdRate * fiatRates[fiat]!,
-          updatedAt: now,
-          source: 'calculated',
-        };
-      }
-    }
-  }
-
-  return rates;
-}
-
 // ==================== Rate Monitor 服务类 ====================
 
 class RateMonitorService {
@@ -328,7 +293,7 @@ class RateMonitorService {
 
   /** 通知所有订阅者 */
   private notifySubscribers(): void {
-    this.callbacks.forEach(cb => {
+    this.callbacks.forEach((cb) => {
       try {
         cb(this.state);
       } catch (error) {
@@ -398,24 +363,22 @@ class RateMonitorService {
           lastSync: Date.now(),
         };
       } else {
-        // Fallback: 方案B + 方案C
-        console.log('[RateMonitor] Falling back to Upbit + Pyth');
+        // CoinGecko 失败：只有 Upbit 能补 KRW，JPY/CNY 这一轮没有新值就保留缓存
+        console.log('[RateMonitor] CoinGecko unavailable, falling back to Upbit (KRW only)');
 
-        rates = this.state.rates; // 保留现有数据
-
-        // 方案C: KRW 从 Upbit 获取
+        rates = this.state.rates;
         const krwRates = await fetchKRWFromUpbit();
         if (krwRates.USDT) rates.USDT.KRW = krwRates.USDT;
         if (krwRates.USDC) rates.USDC.KRW = krwRates.USDC;
-
-        // 方案B: 其他法币从 Pyth 计算
-        const fiatRates = await fetchFiatRatesFromPyth();
-        rates = calculateRatesFromPyth(rates, fiatRates);
+        const gotKrw = !!(krwRates.USDT || krwRates.USDC);
 
         this.state = {
-          status: 'live',
+          status: gotKrw ? 'degraded' : 'error',
           rates,
-          lastSync: Date.now(),
+          lastSync: gotKrw ? Date.now() : this.state.lastSync,
+          error: gotKrw
+            ? 'CoinGecko 不可用，JPY/CNY 为上一轮缓存值'
+            : 'CoinGecko 与 Upbit 均不可用',
         };
       }
 

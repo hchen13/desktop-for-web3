@@ -94,7 +94,9 @@ describe('Bitget Reality 代币化股票现货', () => {
 
   it('大小写不敏感地比较 metadata 字段', () => {
     const out = buildBitgetInstruments(
-      raw({ spot: [reality('RAAPL', { isReality: 'YES', status: 'ONLINE', symbolType: 'STOCK' })] }),
+      raw({
+        spot: [reality('RAAPL', { isReality: 'YES', status: 'ONLINE', symbolType: 'STOCK' })],
+      }),
       ctx(),
     );
     expect(out[0]?.assetKey).toBe('stock:AAPL');

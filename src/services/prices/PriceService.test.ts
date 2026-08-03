@@ -1,401 +1,598 @@
-/**
- * PriceService 单元测试
- *
- * 覆盖：
- *  - probe 选最快源
- *  - 多 subscriber union 合并
- *  - unsubscribe 后停止通知
- *  - source 失败 fallback 到下一个
- *  - chrome.storage 持久化往返
- *  - Pyth 覆盖 REST price 字段（保留 24h%）
- *  - getSnapshot / refresh API
- *  - subscriber 抛错被 catch 不影响其他
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PriceService } from './PriceService';
-import type { AssetMeta } from './types';
-import type { LegacyPriceSnapshot as PriceSnapshot, SourceAdapter } from './legacyTypes';
+import { PriceService, PRICES_STORAGE_KEY } from './PriceService';
+import { exchangeCatalog, EXCHANGE_CATALOG_STORAGE_KEY } from './exchangeCatalog';
+import { __setWebSocketFactoryForTest } from './socket';
+import type { AssetKey, PriceSnapshot, VenueInstrument } from './types';
+import { makeInstrument } from './venues/shared';
 
-function makeAdapter(
-  name: string,
-  opts: {
-    latency?: number;
-    failProbe?: boolean;
-    failFetch?: boolean;
-    fetchResult?: Map<string, PriceSnapshot>;
-  } = {},
-): SourceAdapter {
-  return {
-    name,
-    probe: vi.fn(async () => {
-      if (opts.failProbe) throw new Error('probe failed');
-      return opts.latency ?? 50;
-    }),
-    fetchPrices: vi.fn(async () => {
-      if (opts.failFetch) throw new Error('fetch failed');
-      return opts.fetchResult ?? new Map();
-    }),
-  };
+const memoryStorage = () => (globalThis as any).__memoryStorage;
+
+class SilentSocket {
+  static instances: SilentSocket[] = [];
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  closed = false;
+  constructor(public url: string) {
+    SilentSocket.instances.push(this);
+  }
+  send(): void {}
+  close(): void {
+    this.closed = true;
+    this.readyState = 3;
+  }
+  static reset(): void {
+    SilentSocket.instances = [];
+  }
 }
 
-function snap(symbol: string, price: number, source = 'okx'): PriceSnapshot {
-  return {
+function spot(
+  venue: VenueInstrument['venue'],
+  instrumentId: string,
+  symbol: string,
+  category: VenueInstrument['category'] = 'stock',
+): VenueInstrument {
+  return makeInstrument({
+    venue,
+    instrumentId,
     symbol,
-    price,
-    change24h: 1.23,
-    volume24h: 1000,
-    lastUpdate: 1700000000000,
-    source,
-  };
+    base: symbol,
+    quote: 'USDT',
+    category,
+    productKind: category === 'crypto' ? 'crypto_spot' : 'tokenized_stock_spot',
+    preferredPriceKind: 'last',
+  });
 }
 
-beforeEach(() => {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+function perp(
+  venue: VenueInstrument['venue'],
+  instrumentId: string,
+  symbol: string,
+): VenueInstrument {
+  return makeInstrument({
+    venue,
+    instrumentId,
+    symbol,
+    base: symbol.replace(/\./g, ''),
+    quote: 'USDT',
+    category: 'stock',
+    productKind: 'equity_perp',
+    preferredPriceKind: 'index',
+  });
+}
+
+async function seedCatalog(instruments: VenueInstrument[]): Promise<void> {
+  await chrome.storage.local.set({
+    [EXCHANGE_CATALOG_STORAGE_KEY]: {
+      version: 'v1',
+      timestamp: Date.now(),
+      instruments,
+    },
+  });
+}
+
+interface FetchLog {
+  urls: string[];
+}
+
+/** 覆盖四家 venue 的 targeted quote endpoint；未知 instrument 一律 404 */
+function mockQuoteFetch(prices: Record<string, number>, log: FetchLog) {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input);
-    if (url.includes('/v2/price_feeds')) {
-      return new Response(JSON.stringify([]), { status: 200 });
-    }
-    return new Response(JSON.stringify({ parsed: [] }), { status: 200 });
-  });
-});
+    log.urls.push(url);
 
-describe('PriceService — probe & ranked adapters', () => {
-  let svc: PriceService;
-  beforeEach(() => {
-    svc = new PriceService();
-  });
-  afterEach(() => {
-    svc.__resetForTest();
-    vi.restoreAllMocks();
-  });
-
-  it('选取最快 adapter 排在最前', async () => {
-    const a = makeAdapter('a', { latency: 200 });
-    const b = makeAdapter('b', { latency: 50 });
-    const c = makeAdapter('c', { latency: 100 });
-    svc.__setAdaptersForTest([a, b, c]);
-
-    svc.subscribe(new Set(['BTC']), () => {});
-    await svc.__waitForStartupForTest();
-
-    const ranked = svc.__getRankedAdapters();
-    expect(ranked.slice(0, 3)).toEqual(['b', 'c', 'a']);
-  });
-
-  it('probe 失败的 adapter 被排到末尾，仍参与 fetch fallback', async () => {
-    const a = makeAdapter('a', { latency: 100 });
-    const b = makeAdapter('b', { failProbe: true });
-    svc.__setAdaptersForTest([a, b]);
-
-    svc.subscribe(new Set(['BTC']), () => {});
-    await svc.__waitForStartupForTest();
-    await svc.refresh(new Set(['BTC']));
-    const ranked = svc.__getRankedAdapters();
-    expect(ranked[0]).toBe('a');
-    expect(ranked).toContain('b');
-  });
-});
-
-describe('PriceService — subscribe pool & union', () => {
-  let svc: PriceService;
-  beforeEach(() => {
-    svc = new PriceService();
-  });
-  afterEach(() => {
-    svc.__resetForTest();
-    vi.restoreAllMocks();
-  });
-
-  it('多 subscriber 的 symbols 取并集，仅 fetch 一次', async () => {
-    const result = new Map<string, PriceSnapshot>([
-      ['BTC', snap('BTC', 70000)],
-      ['ETH', snap('ETH', 3500)],
-      ['SOL', snap('SOL', 200)],
-    ]);
-    const okx = makeAdapter('okx', { fetchResult: result });
-    svc.__setAdaptersForTest([okx]);
-
-    const cbA = vi.fn();
-    const cbB = vi.fn();
-    svc.subscribe(new Set(['BTC', 'ETH']), cbA);
-    svc.subscribe(new Set(['ETH', 'SOL']), cbB);
-
-    await svc.refresh();
-
-    // OKX fetchPrices 应只被叫过一次
-    expect(okx.fetchPrices).toHaveBeenCalledTimes(1);
-    // 第一次实参中的 assets 应包含 BTC/ETH/SOL
-    const passed = (okx.fetchPrices as any).mock.calls[0][0] as AssetMeta[];
-    const symbols = passed.map((a) => a.symbol).sort();
-    expect(symbols).toEqual(['BTC', 'ETH', 'SOL']);
-  });
-
-  it('并发刷新不同 symbols 时，后发请求会进入下一批刷新', async () => {
-    let releaseFirstFetch!: () => void;
-    const firstFetchGate = new Promise<void>((resolve) => {
-      releaseFirstFetch = resolve;
-    });
-    let fetchCount = 0;
-    const okx: SourceAdapter = {
-      name: 'okx',
-      probe: vi.fn(async () => 1),
-      fetchPrices: vi.fn(async (assets: AssetMeta[]) => {
-        fetchCount += 1;
-        if (fetchCount === 1) {
-          await firstFetchGate;
-        }
-        return new Map(assets.map((asset) => [asset.symbol, snap(asset.symbol, 100)]));
-      }),
-    };
-    svc.__setAdaptersForTest([okx]);
-
-    const first = svc.refresh(new Set(['BTC']));
-    await Promise.resolve();
-    const second = svc.refresh(new Set(['ETH']));
-
-    releaseFirstFetch();
-    await Promise.all([first, second]);
-
-    expect(okx.fetchPrices).toHaveBeenCalledTimes(2);
-    expect(svc.getSnapshot('BTC')).not.toBeNull();
-    expect(svc.getSnapshot('ETH')).not.toBeNull();
-  });
-
-  it('subscriber 收到的 snapshot 仅含自己 watch 的 symbol', async () => {
-    const result = new Map<string, PriceSnapshot>([
-      ['BTC', snap('BTC', 70000)],
-      ['ETH', snap('ETH', 3500)],
-      ['SOL', snap('SOL', 200)],
-    ]);
-    svc.__setAdaptersForTest([makeAdapter('okx', { fetchResult: result })]);
-
-    const cbA = vi.fn();
-    svc.subscribe(new Set(['BTC']), cbA);
-    await svc.refresh();
-    const lastCall = cbA.mock.calls[cbA.mock.calls.length - 1][0] as Map<string, PriceSnapshot>;
-    expect(Array.from(lastCall.keys())).toEqual(['BTC']);
-  });
-
-  it('unsubscribe 后该 callback 不再被通知', async () => {
-    const result = new Map<string, PriceSnapshot>([['BTC', snap('BTC', 70000)]]);
-    svc.__setAdaptersForTest([makeAdapter('okx', { fetchResult: result })]);
-
-    const cbA = vi.fn();
-    const cbB = vi.fn();
-    const unsubA = svc.subscribe(new Set(['BTC']), cbA);
-    svc.subscribe(new Set(['BTC']), cbB);
-    await svc.refresh();
-    expect(cbA).toHaveBeenCalled();
-    expect(cbB).toHaveBeenCalled();
-
-    cbA.mockClear();
-    cbB.mockClear();
-    unsubA();
-    await svc.refresh();
-    expect(cbA).not.toHaveBeenCalled();
-    expect(cbB).toHaveBeenCalled();
-  });
-
-  it('subscriber callback 抛错被 catch，不影响其它', async () => {
-    const result = new Map<string, PriceSnapshot>([['BTC', snap('BTC', 70000)]]);
-    svc.__setAdaptersForTest([makeAdapter('okx', { fetchResult: result })]);
-
-    const cbA = vi.fn(() => {
-      throw new Error('oops');
-    });
-    const cbB = vi.fn();
-    svc.subscribe(new Set(['BTC']), cbA);
-    svc.subscribe(new Set(['BTC']), cbB);
-    await svc.refresh();
-    expect(cbB).toHaveBeenCalled();
-  });
-});
-
-describe('PriceService — fallback & error handling', () => {
-  let svc: PriceService;
-  beforeEach(() => {
-    svc = new PriceService();
-  });
-  afterEach(() => {
-    svc.__resetForTest();
-    vi.restoreAllMocks();
-  });
-
-  it('primary adapter 失败时 fallback 到下一个', async () => {
-    const ok = makeAdapter('ok', {
-      fetchResult: new Map([['BTC', snap('BTC', 70000, 'ok')]]),
-    });
-    const bad = makeAdapter('bad', { failFetch: true, latency: 10 }); // 最快但失败
-    svc.__setAdaptersForTest([bad, ok]);
-
-    svc.subscribe(new Set(['BTC']), () => {});
-    await svc.refresh();
-
-    const got = svc.getSnapshot('BTC');
-    expect(got).not.toBeNull();
-    expect(got!.price).toBe(70000);
-    expect(bad.fetchPrices).toHaveBeenCalled();
-    expect(ok.fetchPrices).toHaveBeenCalled();
-  });
-
-  it('primary adapter 只返回部分 symbols 时，用后续 adapter 补齐缺失项', async () => {
-    const partial = makeAdapter('partial', {
-      fetchResult: new Map([['BTC', snap('BTC', 70000, 'partial')]]),
-    });
-    const fallback = makeAdapter('fallback', {
-      fetchResult: new Map([['ETH', snap('ETH', 3500, 'fallback')]]),
-    });
-    svc.__setAdaptersForTest([partial, fallback]);
-
-    await svc.refresh(new Set(['BTC', 'ETH']));
-
-    expect(svc.getSnapshot('BTC')!.source).toBe('partial');
-    expect(svc.getSnapshot('ETH')!.source).toBe('fallback');
-    const fallbackAssets = (fallback.fetchPrices as any).mock.calls[0][0] as AssetMeta[];
-    expect(fallbackAssets.map((asset) => asset.symbol)).toEqual(['ETH']);
-  });
-
-  it('全部 adapter 失败时不写 snapshot 但不抛错', async () => {
-    const a = makeAdapter('a', { failFetch: true });
-    const b = makeAdapter('b', { failFetch: true });
-    svc.__setAdaptersForTest([a, b]);
-
-    svc.subscribe(new Set(['BTC']), () => {});
-    await expect(svc.refresh()).resolves.not.toThrow();
-    expect(svc.getSnapshot('BTC')).toBeNull();
-  });
-});
-
-describe('PriceService — Pyth integration', () => {
-  let svc: PriceService;
-  beforeEach(() => {
-    svc = new PriceService();
-  });
-  afterEach(() => {
-    svc.__resetForTest();
-    vi.restoreAllMocks();
-  });
-
-  it('Pyth latest 覆盖 REST price 字段，保留 24h%', async () => {
-    const cexResult = new Map<string, PriceSnapshot>([
-      [
-        'BTC',
-        {
-          symbol: 'BTC',
-          price: 70000,
-          change24h: 2.5,
-          volume24h: 999,
-          lastUpdate: 1700000000000,
-          source: 'okx',
-        },
-      ],
-    ]);
-    svc.__setAdaptersForTest([makeAdapter('okx', { fetchResult: cexResult })]);
-
-    // mock fetch 用于 Pyth latest（globalThis.fetch）
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.includes('/v2/price_feeds')) {
-        return new Response(JSON.stringify([]), { status: 200 });
-      }
+    if (url.includes('okx.com/api/v5/market/ticker')) {
+      const instId = new URL(url).searchParams.get('instId')!;
+      const price = prices[`okx:${instId}`];
+      if (price == null) return new Response(JSON.stringify({ code: '0', data: [] }));
       return new Response(
         JSON.stringify({
-          parsed: [
+          code: '0',
+          data: [{ instId, last: String(price), open24h: String(price * 0.99), volCcy24h: '100' }],
+        }),
+      );
+    }
+    if (url.includes('okx.com/api/v5/market/index-tickers')) {
+      const instId = new URL(url).searchParams.get('instId')!;
+      const price = prices[`okx-index:${instId}`];
+      if (price == null) return new Response(JSON.stringify({ code: '0', data: [] }));
+      return new Response(
+        JSON.stringify({
+          code: '0',
+          data: [{ instId, idxPx: String(price), open24h: String(price * 0.99) }],
+        }),
+      );
+    }
+    if (url.includes('bitget.com/api/v3/market/tickers')) {
+      const symbol = new URL(url).searchParams.get('symbol')!;
+      const price = prices[`bitget:${symbol}`];
+      if (price == null) return new Response(JSON.stringify({ code: '00000', data: [] }));
+      const isFutures = url.includes('USDT-FUTURES');
+      return new Response(
+        JSON.stringify({
+          code: '00000',
+          data: [
             {
-              id: 'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
-              price: { price: '7050000000000', expo: -8, publish_time: 1700000010 },
+              symbol,
+              lastPrice: String(price),
+              price24hPcnt: '0.01',
+              turnover24h: '1000',
+              ...(isFutures ? { indexPrice: String(price) } : {}),
             },
           ],
         }),
-        { status: 200 },
       );
+    }
+    if (url.includes('binance.vision/api/v3/ticker/24hr')) {
+      const symbols = JSON.parse(new URL(url).searchParams.get('symbols')!) as string[];
+      const rows = symbols
+        .filter((s) => prices[`binance:${s}`] != null)
+        .map((s) => ({
+          symbol: s,
+          lastPrice: String(prices[`binance:${s}`]),
+          priceChangePercent: '1',
+          quoteVolume: '1000',
+          closeTime: Date.now(),
+        }));
+      return new Response(JSON.stringify(rows));
+    }
+    if (url.includes('fapi.binance.com/fapi/v1/premiumIndex')) {
+      const symbol = new URL(url).searchParams.get('symbol')!;
+      const price = prices[`binance-perp:${symbol}`];
+      if (price == null) return new Response('not found', { status: 404 });
+      return new Response(
+        JSON.stringify({ symbol, indexPrice: String(price), markPrice: String(price) }),
+      );
+    }
+    if (url.includes('fapi.binance.com/fapi/v1/ticker/24hr')) {
+      return new Response(JSON.stringify({ priceChangePercent: '1', quoteVolume: '10' }));
+    }
+    if (url.includes('hyperliquid.xyz')) {
+      const body = JSON.parse(String((init as RequestInit)?.body ?? '{}'));
+      const price = prices[`hyperliquid:${body.coin}`];
+      if (price == null) return new Response('not found', { status: 404 });
+      return new Response(
+        JSON.stringify({
+          coin: body.coin,
+          time: Date.now(),
+          levels: [[{ px: String(price) }], [{ px: String(price) }]],
+        }),
+      );
+    }
+    return new Response('not found', { status: 404 });
+  });
+}
+
+let service: PriceService;
+
+beforeEach(() => {
+  memoryStorage()?.__reset?.();
+  exchangeCatalog.__resetForTest();
+  SilentSocket.reset();
+  __setWebSocketFactoryForTest((url) => new SilentSocket(url) as unknown as WebSocket);
+  service = new PriceService();
+});
+
+afterEach(() => {
+  service.__resetForTest();
+  exchangeCatalog.__resetForTest();
+  __setWebSocketFactoryForTest(null);
+  vi.restoreAllMocks();
+});
+
+describe('targeted REST', () => {
+  it('周期报价不存在任何未限定 symbol 的全市场 ticker 请求', async () => {
+    await seedCatalog([
+      spot('okx', 'XNVDA-USDT', 'NVDA'),
+      spot('bitget', 'RNVDAUSDT', 'NVDA'),
+      spot('binance', 'NVDABUSDT', 'NVDA'),
+    ]);
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch(
+      { 'okx:XNVDA-USDT': 200, 'bitget:RNVDAUSDT': 200.5, 'binance:NVDABUSDT': 201 },
+      log,
+    );
+
+    service.subscribe(new Set<AssetKey>(['stock:NVDA']), () => {});
+    await service.__settleForTest();
+
+    expect(log.urls.length).toBeGreaterThan(0);
+    for (const url of log.urls) {
+      expect(url).not.toMatch(/market\/tickers\?instType=/);
+      expect(url).not.toMatch(/ticker\/24hr$/);
+      expect(url).not.toMatch(/allMids|metaAndAssetCtxs/);
+    }
+    expect(log.urls.some((u) => u.includes('instId=XNVDA-USDT'))).toBe(true);
+    expect(
+      log.urls.some((u) => u.includes('category=SPOT') && u.includes('symbol=RNVDAUSDT')),
+    ).toBe(true);
+    expect(log.urls.some((u) => u.includes('symbols='))).toBe(true);
+  });
+
+  it('三家 tokenized spot 聚合成 consensus 快照', async () => {
+    await seedCatalog([
+      spot('okx', 'XNVDA-USDT', 'NVDA'),
+      spot('bitget', 'RNVDAUSDT', 'NVDA'),
+      spot('binance', 'NVDABUSDT', 'NVDA'),
+    ]);
+    mockQuoteFetch(
+      { 'okx:XNVDA-USDT': 200, 'bitget:RNVDAUSDT': 200.5, 'binance:NVDABUSDT': 201 },
+      { urls: [] },
+    );
+
+    service.subscribe(new Set<AssetKey>(['stock:NVDA']), () => {});
+    await service.__settleForTest();
+
+    const snap = service.getSnapshot('stock:NVDA')!;
+    expect(snap.price).toBe(200.5);
+    expect(snap.coverageTier).toBe('tokenized-spot-consensus');
+    expect(snap.sources).toEqual(['okx', 'bitget', 'binance']);
+  });
+
+  it('选中新资产后立即请求，不等 timer', async () => {
+    await seedCatalog([spot('okx', 'XNVDA-USDT', 'NVDA'), spot('okx', 'XAAPL-USDT', 'AAPL')]);
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch({ 'okx:XNVDA-USDT': 200, 'okx:XAAPL-USDT': 300 }, log);
+
+    const sub = service.subscribe(new Set<AssetKey>(['stock:NVDA']), () => {});
+    await service.__settleForTest();
+    log.urls.length = 0;
+
+    sub.updateAssets(new Set<AssetKey>(['stock:NVDA', 'stock:AAPL']));
+    await service.__settleForTest();
+
+    expect(log.urls.some((u) => u.includes('instId=XAAPL-USDT'))).toBe(true);
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(300);
+  });
+
+  it('单个 venue 失败时其余 venue 继续更新', async () => {
+    await seedCatalog([spot('okx', 'XNVDA-USDT', 'NVDA'), spot('bitget', 'RNVDAUSDT', 'NVDA')]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('okx.com')) throw new Error('okx down');
+      if (url.includes('bitget.com')) {
+        return new Response(
+          JSON.stringify({
+            code: '00000',
+            data: [{ symbol: 'RNVDAUSDT', lastPrice: '200', price24hPcnt: '0.01' }],
+          }),
+        );
+      }
+      return new Response('not found', { status: 404 });
     });
 
-    svc.subscribe(new Set(['BTC']), () => {});
-    await svc.refresh();
+    service.subscribe(new Set<AssetKey>(['stock:NVDA']), () => {});
+    await service.__settleForTest();
 
-    const final = svc.getSnapshot('BTC');
-    expect(final).not.toBeNull();
-    expect(final!.price).toBeCloseTo(70500, 0); // 来自 Pyth
-    expect(final!.change24h).toBeCloseTo(2.5, 5); // 来自 OKX
-    expect(final!.source).toBe('pyth');
+    const snap = service.getSnapshot('stock:NVDA')!;
+    expect(snap.price).toBe(200);
+    expect(snap.sources).toEqual(['bitget']);
   });
 });
 
-describe('PriceService — chrome.storage 持久化', () => {
-  let svc: PriceService;
-  beforeEach(() => {
-    svc = new PriceService();
-    (globalThis as any).__memoryStorage?.__reset?.();
+describe('冷启动 candidate 验证', () => {
+  it('没有 catalog 缓存时用保守 candidate 做 targeted 验证，不请求全市场 catalog', async () => {
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch(
+      { 'okx:BTC-USDT': 70000, 'bitget:BTCUSDT': 70100, 'binance:BTCUSDT': 70050 },
+      log,
+    );
+
+    service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {});
+    await service.__settleForTest();
+
+    expect(log.urls.some((u) => u.includes('public/instruments'))).toBe(false);
+    expect(log.urls.some((u) => u.includes('exchangeInfo'))).toBe(false);
+    expect(service.getSnapshot('crypto:BTC')!.price).toBe(70050);
   });
-  afterEach(() => {
-    svc.__resetForTest();
-    vi.restoreAllMocks();
+
+  it('验证成功后 mapping 写回 catalog 缓存', async () => {
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000 }, { urls: [] });
+
+    service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {});
+    await service.__settleForTest();
+    await Promise.resolve();
+
+    expect(exchangeCatalog.instrumentsFor('crypto:BTC').map((i) => i.instrumentId)).toEqual([
+      'BTC-USDT',
+    ]);
   });
 
-  it('fetch 后写入 storage，新实例可恢复', async () => {
-    const result = new Map<string, PriceSnapshot>([['BTC', snap('BTC', 70000)]]);
-    svc.__setAdaptersForTest([makeAdapter('okx', { fetchResult: result })]);
+  it('Tier 1 全部失败时才试 Tier 2，并标记 derivative-reference', async () => {
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch({ 'bitget:BRKBUSDT': 512.8, 'okx-index:BRKB-USDT': 512.9 }, log);
 
-    svc.subscribe(new Set(['BTC']), () => {});
-    await svc.refresh();
-    // 让 persist promise 完成
-    await new Promise((r) => setTimeout(r, 0));
+    service.subscribe(new Set<AssetKey>(['stock:BRK.B']), () => {});
+    await service.__settleForTest();
 
-    // 用一个新实例验证恢复
-    const svc2 = new PriceService();
+    expect(log.urls.some((u) => u.includes('instId=XBRKB-USDT'))).toBe(true);
+    const snap = service.getSnapshot('stock:BRK.B')!;
+    expect(snap.coverageTier).toBe('derivative-reference');
+    expect(snap.priceKind).toBe('index');
+  });
+
+  it('FBTC / XLF 没有精确 instrument 时标记 unavailable，不使用代理价', async () => {
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000, 'binance:IBITBUSDT': 60 }, log);
+
+    service.subscribe(new Set<AssetKey>(['etf:FBTC', 'etf:XLF']), () => {});
+    await service.__settleForTest();
+
+    for (const key of ['etf:FBTC', 'etf:XLF'] as AssetKey[]) {
+      const snap = service.getSnapshot(key)!;
+      expect(snap.quality).toBe('unavailable');
+      expect(snap.coverageTier).toBe('unavailable');
+      expect(snap.sourceCount).toBe(0);
+    }
+    // 只请求过由 canonical 推导出来的 instrument，没有借用 BTC / IBIT 之类的代理
+    expect(log.urls.some((u) => u.includes('instId=BTC-USDT'))).toBe(false);
+    expect(log.urls.some((u) => u.includes('IBIT'))).toBe(false);
+    expect(log.urls.some((u) => u.includes('XFBTC-USDT'))).toBe(true);
+    expect(log.urls.some((u) => u.includes('RXLFUSDT'))).toBe(true);
+  });
+
+  it('FX 没有经过验证的公开产品，直接 unavailable 且零请求', async () => {
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch({}, log);
+
+    service.subscribe(new Set<AssetKey>(['fx:EURUSD']), () => {});
+    await service.__settleForTest();
+
+    expect(log.urls).toHaveLength(0);
+    expect(service.getSnapshot('fx:EURUSD')!.quality).toBe('unavailable');
+  });
+});
+
+describe('稳定订阅与 union', () => {
+  it('多个 subscriber 的 AssetKey 取并集且去重', async () => {
+    await seedCatalog([
+      spot('okx', 'BTC-USDT', 'BTC', 'crypto'),
+      spot('okx', 'ETH-USDT', 'ETH', 'crypto'),
+      spot('okx', 'SOL-USDT', 'SOL', 'crypto'),
+    ]);
+    mockQuoteFetch(
+      { 'okx:BTC-USDT': 70000, 'okx:ETH-USDT': 3500, 'okx:SOL-USDT': 200 },
+      { urls: [] },
+    );
+
+    service.subscribe(new Set<AssetKey>(['crypto:BTC', 'crypto:ETH']), () => {});
+    service.subscribe(new Set<AssetKey>(['crypto:ETH', 'crypto:SOL']), () => {});
+    await service.__settleForTest();
+
+    const ids = service
+      .__desiredInstrumentsForTest()
+      .map((i) => i.instrumentId)
+      .sort();
+    expect(ids).toEqual(['BTC-USDT', 'ETH-USDT', 'SOL-USDT']);
+  });
+
+  it('subscriber 只收到自己关注的 AssetKey', async () => {
+    await seedCatalog([
+      spot('okx', 'BTC-USDT', 'BTC', 'crypto'),
+      spot('okx', 'ETH-USDT', 'ETH', 'crypto'),
+    ]);
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000, 'okx:ETH-USDT': 3500 }, { urls: [] });
+
+    let latest = new Map<AssetKey, PriceSnapshot>();
+    service.subscribe(new Set<AssetKey>(['crypto:BTC']), (snap) => {
+      latest = snap;
+    });
+    service.subscribe(new Set<AssetKey>(['crypto:ETH']), () => {});
+    await service.__settleForTest();
+
+    expect([...latest.keys()]).toEqual(['crypto:BTC']);
+  });
+
+  it('setActive(false) 的订阅不进入 union，价格网络活动归零', async () => {
+    await seedCatalog([spot('okx', 'BTC-USDT', 'BTC', 'crypto')]);
+    const log: FetchLog = { urls: [] };
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000 }, log);
+
+    const sub = service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {});
+    await service.__settleForTest();
+    expect(service.__connectionCountForTest()).toBeGreaterThan(0);
+    log.urls.length = 0;
+
+    sub.setActive(false);
+    await service.__settleForTest();
+
+    expect(service.__desiredInstrumentsForTest()).toHaveLength(0);
+    expect(service.__connectionCountForTest()).toBe(0);
+    expect(log.urls).toHaveLength(0);
+  });
+
+  it('快速切换 layout（旧的先失活、新的再激活）不会产生瞬时断连', async () => {
+    await seedCatalog([spot('okx', 'BTC-USDT', 'BTC', 'crypto')]);
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000 }, { urls: [] });
+
+    const oldLayout = service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {});
+    await service.__settleForTest();
+    const socketBefore = SilentSocket.instances.length;
+
+    // 同一个 microtask 里失活旧的、激活新的
+    oldLayout.setActive(false);
+    service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {});
+    await service.__settleForTest();
+
+    expect(SilentSocket.instances).toHaveLength(socketBefore);
+    expect(SilentSocket.instances.every((s) => !s.closed)).toBe(true);
+  });
+
+  it('unsubscribe 后不再收到通知', async () => {
+    await seedCatalog([spot('okx', 'BTC-USDT', 'BTC', 'crypto')]);
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000 }, { urls: [] });
+
     const cb = vi.fn();
-    // 不发起任何 adapter 请求；恢复后第一次 callback 应已带数据
-    svc2.__setAdaptersForTest([makeAdapter('okx', { failFetch: true })]);
-    svc2.subscribe(new Set(['BTC']), cb);
-    // 等异步 restore 完成
-    await new Promise((r) => setTimeout(r, 0));
-    await new Promise((r) => setTimeout(r, 0));
+    const sub = service.subscribe(new Set<AssetKey>(['crypto:BTC']), cb);
+    await service.__settleForTest();
+    sub.unsubscribe();
+    cb.mockClear();
 
-    // restore 后 snapshots 应包含 BTC（由 storage 注入）
-    const found = svc2.getSnapshot('BTC');
-    expect(found).not.toBeNull();
-    expect(found!.price).toBe(70000);
-    svc2.__resetForTest();
+    await service.refreshAssets(new Set<AssetKey>(['crypto:BTC']));
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('subscriber 抛错被捕获，不影响其他 subscriber', async () => {
+    await seedCatalog([spot('okx', 'BTC-USDT', 'BTC', 'crypto')]);
+    mockQuoteFetch({ 'okx:BTC-USDT': 70000 }, { urls: [] });
+
+    const good = vi.fn();
+    service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {
+      throw new Error('boom');
+    });
+    service.subscribe(new Set<AssetKey>(['crypto:BTC']), good);
+    await service.__settleForTest();
+
+    expect(good).toHaveBeenCalled();
   });
 });
 
-describe('PriceService — getSnapshot & refresh', () => {
-  let svc: PriceService;
-  beforeEach(() => {
-    svc = new PriceService();
-  });
-  afterEach(() => {
-    svc.__resetForTest();
-    vi.restoreAllMocks();
+describe('缓存迁移', () => {
+  it('旧的 stock:SQ 缓存迁移到 stock:XYZ 且标记 stale', async () => {
+    await chrome.storage.local.set({
+      [PRICES_STORAGE_KEY]: {
+        version: 'v2',
+        snapshots: {
+          'stock:SQ': {
+            assetKey: 'stock:SQ',
+            symbol: 'SQ',
+            price: 60,
+            change24h: 1,
+            volume24h: null,
+            lastUpdate: 1000,
+            source: 'okx',
+            sources: ['okx'],
+            sourceCount: 1,
+            quality: 'live',
+            coverageTier: 'single-source',
+            quoteCurrency: 'USDT',
+            productKind: 'tokenized_stock_spot',
+            priceKind: 'last',
+          },
+        },
+      },
+    });
+    mockQuoteFetch({}, { urls: [] });
+
+    service.subscribe(new Set<AssetKey>(['stock:XYZ']), () => {});
+    await service.__settleForTest();
+
+    // 缓存价被保留下来，但明确标记为暂无可用市场，不会伪装成 live
+    const snap = service.getSnapshot('stock:XYZ')!;
+    expect(snap.symbol).toBe('XYZ');
+    expect(snap.assetKey).toBe('stock:XYZ');
+    expect(snap.price).toBe(60);
+    expect(snap.quality).toBe('unavailable');
   });
 
-  it('未订阅前 getSnapshot 返回 null', () => {
-    expect(svc.getSnapshot('BTC')).toBeNull();
+  it('旧缓存永远不作为 fresh 来源参与聚合', async () => {
+    await chrome.storage.local.set({
+      [PRICES_STORAGE_KEY]: {
+        version: 'v2',
+        snapshots: { 'stock:NVDA': makeCached('stock:NVDA', 'NVDA', 60, 1000) },
+      },
+    });
+    await seedCatalog([spot('okx', 'XNVDA-USDT', 'NVDA')]);
+    mockQuoteFetch({ 'okx:XNVDA-USDT': 200 }, { urls: [] });
+
+    service.subscribe(new Set<AssetKey>(['stock:NVDA']), () => {});
+    await service.__settleForTest();
+
+    const snap = service.getSnapshot('stock:NVDA')!;
+    expect(snap.price).toBe(200);
+    expect(snap.sourceCount).toBe(1);
+    expect(snap.sources).toEqual(['okx']);
+    expect(snap.quality).toBe('live');
   });
 
-  it('refresh 不带 symbol 时刷新当前 union', async () => {
-    const result = new Map<string, PriceSnapshot>([['BTC', snap('BTC', 70000)]]);
-    const okx = makeAdapter('okx', { fetchResult: result });
-    svc.__setAdaptersForTest([okx]);
+  it('旧 SQ 缓存不会覆盖更新的 XYZ 报价', async () => {
+    await chrome.storage.local.set({
+      [PRICES_STORAGE_KEY]: {
+        version: 'v2',
+        snapshots: {
+          'stock:XYZ': makeCached('stock:XYZ', 'XYZ', 80, 5000),
+          'stock:SQ': makeCached('stock:SQ', 'SQ', 60, 1000),
+        },
+      },
+    });
+    mockQuoteFetch({}, { urls: [] });
 
-    svc.subscribe(new Set(['BTC']), () => {});
-    await svc.refresh();
-    expect(okx.fetchPrices).toHaveBeenCalled();
+    service.subscribe(new Set<AssetKey>(['stock:XYZ']), () => {});
+    await service.__settleForTest();
+
+    expect(service.getSnapshot('stock:XYZ')!.price).toBe(80);
   });
 
-  it('refresh 空 union 时直接返回', async () => {
-    const okx = makeAdapter('okx');
-    svc.__setAdaptersForTest([okx]);
-    await svc.refresh(new Set());
-    expect(okx.fetchPrices).not.toHaveBeenCalled();
-  });
+  it('启动时清理旧 Pyth 缓存 key', async () => {
+    await chrome.storage.local.set({ prices_cache_v1: { x: 1 }, pyth_catalog_v1: { y: 2 } });
+    mockQuoteFetch({}, { urls: [] });
 
-  it('subscribe 时立即推一次（即使 snapshots 为空）', () => {
-    svc.__setAdaptersForTest([makeAdapter('okx', { failFetch: true })]);
-    const cb = vi.fn();
-    svc.subscribe(new Set(['BTC']), cb);
-    expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0][0].size).toBe(0);
+    service.subscribe(new Set<AssetKey>(['fx:EURUSD']), () => {});
+    await service.__settleForTest();
+
+    const store = memoryStorage().__getStore();
+    expect(store.prices_cache_v1).toBeUndefined();
+    expect(store.pyth_catalog_v1).toBeUndefined();
   });
 });
+
+describe('crypto:COIN 与 stock:COIN 不冲突', () => {
+  it('两个资产各自解析到自己的 instrument', async () => {
+    await seedCatalog([
+      spot('okx', 'COIN-USDT', 'COIN', 'crypto'),
+      spot('okx', 'XCOIN-USDT', 'COIN', 'stock'),
+    ]);
+    mockQuoteFetch({ 'okx:COIN-USDT': 1.5, 'okx:XCOIN-USDT': 320 }, { urls: [] });
+
+    service.subscribe(new Set<AssetKey>(['crypto:COIN', 'stock:COIN']), () => {});
+    await service.__settleForTest();
+
+    expect(service.getSnapshot('crypto:COIN')!.price).toBe(1.5);
+    expect(service.getSnapshot('stock:COIN')!.price).toBe(320);
+  });
+});
+
+describe('perp fallback 与 BRK.B', () => {
+  it('BRK.B 命中 equity perp 并使用 index 价格', async () => {
+    await seedCatalog([
+      perp('bitget', 'BRKBUSDT', 'BRK.B'),
+      perp('okx', 'BRKB-USDT-SWAP', 'BRK.B'),
+    ]);
+    mockQuoteFetch({ 'bitget:BRKBUSDT': 512.8, 'okx-index:BRKB-USDT': 512.9 }, { urls: [] });
+
+    service.subscribe(new Set<AssetKey>(['stock:BRK.B']), () => {});
+    await service.__settleForTest();
+
+    const snap = service.getSnapshot('stock:BRK.B')!;
+    expect(snap.coverageTier).toBe('derivative-reference');
+    expect(snap.quality).toBe('degraded');
+    expect(snap.priceKind).toBe('index');
+    expect(snap.price).toBeCloseTo(512.85, 4);
+  });
+});
+
+function makeCached(
+  assetKey: AssetKey,
+  symbol: string,
+  price: number,
+  lastUpdate: number,
+): PriceSnapshot {
+  return {
+    assetKey,
+    symbol,
+    price,
+    change24h: null,
+    volume24h: null,
+    lastUpdate,
+    source: 'okx',
+    sources: ['okx'],
+    sourceCount: 1,
+    quality: 'live',
+    coverageTier: 'single-source',
+    quoteCurrency: 'USDT',
+    productKind: 'tokenized_stock_spot',
+    priceKind: 'last',
+  };
+}
