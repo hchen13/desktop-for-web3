@@ -10,7 +10,7 @@
 import { Show, onMount, onCleanup, createSignal, createMemo, Index } from 'solid-js';
 import { priceService } from '../../services/prices/PriceService';
 import { getAssetMeta, getLogoUrlChain } from '../../services/prices/assets';
-import type { PriceSnapshot } from '../../services/prices/types';
+import type { LegacyPriceSnapshot as PriceSnapshot } from '../../services/prices/legacyTypes';
 import type { AssetMeta } from '../../services/prices/types';
 import { useContextMenu } from '../layout/ContextMenu';
 import { mergeMenuItems } from '../../grid/contextMenuUtils';

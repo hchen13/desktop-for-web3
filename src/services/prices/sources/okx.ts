@@ -1,4 +1,5 @@
-import type { AssetMeta, PriceSnapshot, SourceAdapter } from '../types';
+import type { AssetMeta } from '../types';
+import type { LegacyPriceSnapshot as PriceSnapshot, SourceAdapter } from '../legacyTypes';
 
 const OKX_TICKERS_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SPOT';
 const OKX_PING_URL = 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT';

@@ -1,4 +1,5 @@
-import type { AssetMeta, PriceSnapshot, SourceAdapter } from '../types';
+import type { AssetMeta } from '../types';
+import type { LegacyPriceSnapshot as PriceSnapshot, SourceAdapter } from '../legacyTypes';
 
 const BYBIT_TICKERS_URL = 'https://api.bybit.com/v5/market/tickers?category=spot';
 const BYBIT_PING_URL = 'https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT';

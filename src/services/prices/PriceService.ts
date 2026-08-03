@@ -8,13 +8,13 @@
  * - chrome.storage.local 持久化最新 snapshot 用于冷启动
  */
 
+import type { AssetMeta } from './types';
 import type {
-  AssetMeta,
-  PriceCallback,
-  PriceSnapshot,
-  PriceSubscriber,
+  LegacyPriceCallback as PriceCallback,
+  LegacyPriceSnapshot as PriceSnapshot,
+  LegacyPriceSubscriber as PriceSubscriber,
   SourceAdapter,
-} from './types';
+} from './legacyTypes';
 import { ASSETS, getAssetMeta } from './assets';
 import { okxAdapter } from './sources/okx';
 import { bitgetAdapter } from './sources/bitget';

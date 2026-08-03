@@ -1,4 +1,5 @@
-import type { AssetMeta, PriceSnapshot, SourceAdapter } from '../types';
+import type { AssetMeta } from '../types';
+import type { LegacyPriceSnapshot as PriceSnapshot, SourceAdapter } from '../legacyTypes';
 
 const BITGET_TICKERS_URL = 'https://api.bitget.com/api/v2/spot/market/tickers';
 const BITGET_PING_URL = 'https://api.bitget.com/api/v2/spot/market/tickers?symbol=BTCUSDT';

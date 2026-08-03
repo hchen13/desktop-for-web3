@@ -6,7 +6,8 @@
  *
  * 测试只覆盖 normalize / latest。SSE 由 PriceService 集成时使用。
  */
-import type { AssetMeta, PriceSnapshot } from '../types';
+import type { AssetMeta } from '../types';
+import type { LegacyPriceSnapshot as PriceSnapshot } from '../legacyTypes';
 import { getPythBenchmarkSymbol } from '../assets';
 
 const HERMES_BASE = 'https://hermes.pyth.network';

@@ -1,23 +1,24 @@
 /**
  * 价格服务类型定义
  *
- * - PriceSnapshot：单个资产在某一时刻的价格快照
- * - AssetMeta：静态资产元数据
- * - SourceAdapter：CEX REST adapter 通用接口
- * - PriceSubscriber：订阅者结构
+ * 资产身份统一用 AssetKey（`${category}:${SYMBOL}`），避免 crypto:COIN 与 stock:COIN 碰撞。
+ * 行情来源统一用 VenueInstrument（交易所侧 instrument）+ VenueQuote（单一 instrument 报价）。
  */
 
 export type AssetCategory = 'crypto' | 'stock' | 'etf' | 'fx' | 'commodity';
 
+/** `${AssetCategory}:${UPPERCASE_SYMBOL}`，如 'crypto:BTC' / 'stock:BRK.B' / 'etf:SPY' */
+export type AssetKey = string;
+
 export interface AssetMeta {
   /** 用户面 canonical ticker，如 'BTC' / 'NVDA' / 'XAU' */
   symbol: string;
-  /** 全名，如 'Bitcoin' / 'NVIDIA Corp.' */
+  /** 全名，如 'Bitcoin' / 'NVIDIA' */
   name: string;
   /** 资产类别 */
   category: AssetCategory;
-  /** Pyth Hermes feed_id（64 hex，0x 前缀）；无 feed 时为 null */
-  pythFeedId: string | null;
+  /** Pyth Hermes feed_id（64 hex，0x 前缀）；随旧 Pyth 运行链一起删除 */
+  pythFeedId?: string | null;
   /** CEX 上的对名，仅 crypto 有意义 */
   cexPair?: { base: string; quote: string };
   /** logo slug（用于 coincap 等图源 URL 拼接） */
@@ -26,37 +27,100 @@ export interface AssetMeta {
   rank?: number;
 }
 
-export interface PriceSnapshot {
+/** 支持的行情场所 */
+export type Venue = 'okx' | 'bitget' | 'binance' | 'hyperliquid';
+
+/**
+ * 产品类别 —— 不同类别的价格语义不同，禁止跨类别平均。
+ *
+ * - crypto_spot           普通加密现货
+ * - tokenized_stock_spot  代币化股票现货（OKX Unified Tokenized Stocks / Bitget Reality / Binance bStocks）
+ * - equity_perp           CEX 股票永续
+ * - hip3_perp             Hyperliquid HIP-3 builder-deployed 永续
+ * - fx_perp / commodity_perp  交易所 metadata 明确分类的外汇 / 商品永续
+ */
+export type ProductKind =
+  | 'crypto_spot'
+  | 'tokenized_stock_spot'
+  | 'equity_perp'
+  | 'hip3_perp'
+  | 'fx_perp'
+  | 'commodity_perp';
+
+/** 价格字段语义 —— 只能在相同 PriceKind 内聚合 */
+export type PriceKind = 'last' | 'index' | 'oracle' | 'mark' | 'mid';
+
+export type InstrumentStatus = 'live' | 'suspended';
+
+export interface VenueInstrument {
+  venue: Venue;
+  /** 交易所侧 instrument 标识，如 'XAAPL-USDT' / 'RAAPLUSDT' / 'AAPLBUSDT' / 'xyz:AAPL' */
+  instrumentId: string;
+  assetKey: AssetKey;
+  /** 用户面 canonical symbol */
   symbol: string;
-  /** 最新价（单位 USD 或 quote 资产） */
+  base: string;
+  quote: string;
+  category: AssetCategory;
+  productKind: ProductKind;
+  preferredPriceKind: PriceKind;
+  status: InstrumentStatus;
+}
+
+export interface VenueQuote {
+  assetKey: AssetKey;
+  venue: Venue;
+  instrumentId: string;
+  productKind: ProductKind;
+  priceKind: PriceKind;
+  /** 计价货币（USDT 报价不等于真实 USD） */
+  quoteCurrency: string;
   price: number;
-  /** 24h 涨跌幅（百分比，如 +1.23 表示 +1.23%） */
+  /** 该交易所产品自身的滚动 24h 变化百分比，不是美股相对上一交易日收盘 */
   change24h: number | null;
-  /** 24h 成交量（quote 资产计） */
   volume24h: number | null;
-  /** 数据更新毫秒时间戳 */
+  /** 交易所给出的行情时间戳 */
+  sourceTimestamp: number;
+  /** 本地收到的时间戳 */
+  receivedAt: number;
+}
+
+/** 聚合结果的覆盖等级 */
+export type CoverageTier =
+  | 'spot-consensus'
+  | 'tokenized-spot-consensus'
+  | 'single-source'
+  | 'derivative-reference'
+  | 'trusted-oracle-fallback'
+  | 'stale'
+  | 'unavailable';
+
+export type QuoteQuality = 'live' | 'degraded' | 'stale' | 'unavailable';
+
+export interface PriceSnapshot {
+  assetKey: AssetKey;
+  symbol: string;
+  price: number;
+  change24h: number | null;
+  volume24h: number | null;
   lastUpdate: number;
-  /** 数据源标记（rest source 名称 / pyth） */
+  /** 代表来源（提供 change24h / volume24h 的那一家） */
   source: string;
+  /** 参与聚合的 venue 列表 */
+  sources: Venue[];
+  sourceCount: number;
+  quality: QuoteQuality;
+  coverageTier: CoverageTier;
+  quoteCurrency: string;
+  productKind: ProductKind | null;
+  priceKind: PriceKind | null;
 }
 
-/** REST adapter 拉取多个 symbol 的接口；返回 symbol→snapshot 映射 */
-export interface SourceAdapter {
-  /** adapter 名字，作为标识 */
-  name: string;
-  /**
-   * Probe — 测试连通性，返回延迟（毫秒），失败则 reject
-   */
-  probe(): Promise<number>;
-  /**
-   * 拉取一组 crypto 资产的最新价（仅 cryptos with cexPair）
-   */
-  fetchPrices(assets: AssetMeta[]): Promise<Map<string, PriceSnapshot>>;
-}
+export type PriceCallback = (snapshots: Map<AssetKey, PriceSnapshot>) => void;
 
-export type PriceCallback = (snapshot: Map<string, PriceSnapshot>) => void;
-
-export interface PriceSubscriber {
-  symbols: Set<string>;
-  callback: PriceCallback;
+/** 稳定订阅 handle —— 换币只更新 AssetKey 集合，不重建 subscriber */
+export interface PriceSubscription {
+  updateAssets(assetKeys: Set<AssetKey>): void;
+  setActive(active: boolean): void;
+  unsubscribe(): void;
 }

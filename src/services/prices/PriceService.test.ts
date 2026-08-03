@@ -13,7 +13,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PriceService } from './PriceService';
-import type { AssetMeta, PriceSnapshot, SourceAdapter } from './types';
+import type { AssetMeta } from './types';
+import type { LegacyPriceSnapshot as PriceSnapshot, SourceAdapter } from './legacyTypes';
 
 function makeAdapter(
   name: string,

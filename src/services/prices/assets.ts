@@ -11,7 +11,8 @@
  * （主网 mainnet ids）。无对应 Pyth feed 的条目用 null 表示，REST 兜底。
  */
 
-import type { AssetMeta } from './types';
+import type { AssetKey, AssetMeta } from './types';
+import { assetKeyOf, migrateAssetKey } from './assetKey';
 import { dynamicCatalog } from './dynamicCatalog';
 
 // ============ Logo helpers ============
@@ -1210,8 +1211,9 @@ const STOCKS: AssetMeta[] = [
     pythFeedId: '0x773c3b11f6be58e8151966a9f5832696d8cd08884ccc43ac8965a7ebea911533' as Hex,
   },
   {
-    symbol: 'SQ',
-    name: 'Block',
+    // Block, Inc. 已把 ticker 从 SQ 换成 XYZ；旧配置与旧缓存由 assetKey.ts 的迁移表处理
+    symbol: 'XYZ',
+    name: 'Block, Inc.',
     category: 'stock',
     rank: 42,
     pythFeedId: '0x6d64b1981512c242162d6ba54f6bda35c59f726f2e075a42994fc9a33c6c2d55' as Hex,
@@ -1539,6 +1541,20 @@ export const ASSETS: AssetMeta[] = [...CRYPTO, ...STOCKS, ...ETFS, ...FX_COMMODI
 
 /** 通过 symbol 查询元数据。先查 curated ASSETS，没有再 fallback 到动态 Pyth catalog */
 const ASSET_INDEX = new Map<string, AssetMeta>(ASSETS.map((a) => [a.symbol, a]));
+
+/**
+ * AssetKey → curated 元数据。
+ * symbol 索引无法区分 crypto:COIN 与 stock:COIN，凡是涉及资产身份的查询都走这里。
+ */
+const CURATED_BY_KEY = new Map<AssetKey, AssetMeta>(ASSETS.map((a) => [assetKeyOf(a), a]));
+
+export function getCuratedAsset(assetKey: AssetKey): AssetMeta | undefined {
+  return CURATED_BY_KEY.get(migrateAssetKey(assetKey));
+}
+
+export function curatedAssetKeys(): AssetKey[] {
+  return Array.from(CURATED_BY_KEY.keys());
+}
 
 export function getAssetMeta(symbol: string): AssetMeta | undefined {
   const curated = ASSET_INDEX.get(symbol);

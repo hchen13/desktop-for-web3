@@ -1,4 +1,5 @@
-import type { AssetMeta, PriceSnapshot, SourceAdapter } from '../types';
+import type { AssetMeta } from '../types';
+import type { LegacyPriceSnapshot as PriceSnapshot, SourceAdapter } from '../legacyTypes';
 
 const COINBASE_BASE = 'https://api.exchange.coinbase.com';
 const COINBASE_PING_URL = `${COINBASE_BASE}/products/BTC-USD/ticker`;
