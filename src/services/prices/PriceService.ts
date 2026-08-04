@@ -49,6 +49,13 @@ export const WS_UNCOVERED_REFRESH_MS = 60_000;
 export const NOTIFY_COALESCE_MS = 250;
 /** effective tier 掉档后重新定向探测 Tier 1 的间隔 */
 export const TIER_RECOVERY_PROBE_MS = 5 * 60_000;
+/**
+ * 同一（资产, 层）重新验证 candidate 的最小间隔。
+ *
+ * 瞬时失败不能被永久负缓存，但也不能每轮重打——PASSIVE_VISIBLE 每 60 秒就有一次
+ * targeted tick，没有这个节流的话一个下线的 venue 会被反复敲。
+ */
+export const CANDIDATE_RETRY_MS = 5 * 60_000;
 /** 各模式下报价的新鲜度窗口 */
 export const FRESHNESS_WINDOW_MS: Record<TransportMode, number> = {
   off: 5 * 60_000,
@@ -68,6 +75,19 @@ interface SubscriptionRecord {
   callback: PriceCallback;
 }
 
+/** 一次 candidate 验证的结果；attempted 区分「这一层没请求过」和「请求了但没验上」 */
+interface CandidateProbe {
+  attempted: boolean;
+  instruments: VenueInstrument[];
+}
+
+/** doResolve 交给紧随其后那次刷新的证据：本轮试过哪些层、在哪一层拿到了报价 */
+interface ResolutionHandoff {
+  epoch: number;
+  attempted: Set<SourceTier>;
+  quotedTier: SourceTier | null;
+}
+
 function isChromeStorageAvailable(): boolean {
   try {
     return typeof chrome !== 'undefined' && !!chrome.storage?.local?.get;
@@ -82,25 +102,36 @@ function normalizeKeys(assetKeys: Set<AssetKey>): Set<AssetKey> {
   return out;
 }
 
+function probeKey(assetKey: AssetKey, tier: SourceTier): string {
+  return `${assetKey}|${tier}`;
+}
+
+function instrumentId(instrument: VenueInstrument): string {
+  return `${instrument.venue}|${instrument.instrumentId}`;
+}
+
 export class PriceService {
   private snapshots = new Map<AssetKey, PriceSnapshot>();
   private subscriptions = new Set<SubscriptionRecord>();
   private quotes = new QuoteStore();
   private resolved = new Map<AssetKey, VenueInstrument[]>();
-  private resolving = new Map<AssetKey, Promise<VenueInstrument[]>>();
+  private resolving = new Map<AssetKey, { epoch: number; promise: Promise<VenueInstrument[]> }>();
   private effectiveTier = new Map<AssetKey, SourceTier>();
   private unavailable = new Set<AssetKey>();
   private refreshInFlight = new Map<AssetKey, Promise<void>>();
 
   private pool = new QuoteSocketPool(SOCKET_ENDPOINTS, (quotes) => this.onSocketQuotes(quotes));
   private lifecycle = new TransportLifecycle({
-    hasWork: () => this.desiredInstruments.length > 0,
+    // OFF 的判据是「没有 active Watchlist 或没有 selected AssetKey」。不能用
+    // desiredInstruments，否则一个暂时没验证出 instrument 的资产会被当成没有工作，
+    // 连低频恢复探测都排不上，永远停在 unavailable
+    hasWork: () => this.currentUnion.size > 0,
     onModeChange: (mode, previous, ctx) => this.onModeChange(mode, previous, ctx),
     onPassiveTick: () => {
       void this.refreshAssets().catch(() => {});
     },
     onResume: () => {
-      if (this.desiredInstruments.length === 0) return;
+      if (this.currentUnion.size === 0) return;
       void this.refreshAssets().catch(() => {});
     },
   });
@@ -115,12 +146,19 @@ export class PriceService {
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   private desiredFingerprint = '';
   private restorePromise: Promise<void> | null = null;
-  /** 每个资产一个 refresh token；资产被移除或进入 OFF 时递增，使在飞的异步操作失效 */
+  /** 每个资产一个 owner token；资产不再被任何 active subscriber 需要时递增 */
   private assetEpoch = new Map<AssetKey, number>();
+  /**
+   * 实时的 active subscription union。订阅一变就同步更新，比 currentUnion 早一步：
+   * 冷启动解析期间资产还没进 currentUnion，所有权只能以这里为准。
+   */
+  private wanted = new Set<AssetKey>();
   /** recovery 调度 epoch；离开 realtime / stop / freeze 时递增，防止 probe 完成后复活 timer */
   private recoveryEpoch = 0;
-  /** doResolve 刚在哪一层拿到过可用报价；一次性，供紧随其后的刷新跳过重复请求 */
-  private resolutionQuotedTier = new Map<AssetKey, SourceTier>();
+  /** doResolve 交给紧随其后那次刷新的一次性证据 */
+  private resolutionHandoff = new Map<AssetKey, ResolutionHandoff>();
+  /** `${assetKey}|${tier}` → 上次 candidate 验证时间，用于 5 分钟节流 */
+  private candidateProbedAt = new Map<string, number>();
   private reconciling = false;
   private enteredRealtimeDuringReconcile = false;
   private catalogUnsubscribe: (() => void) | null = null;
@@ -140,6 +178,7 @@ export class PriceService {
       callback,
     };
     this.subscriptions.add(record);
+    this.settleOwnership();
     void this.ensureRestored();
     this.watchCatalog();
     this.scheduleReconcile();
@@ -148,19 +187,43 @@ export class PriceService {
     return {
       updateAssets: (next) => {
         record.assetKeys = normalizeKeys(next);
+        this.settleOwnership();
         this.scheduleReconcile();
         this.pushTo(record);
       },
       setActive: (active) => {
         if (record.active === active) return;
         record.active = active;
+        this.settleOwnership();
         this.scheduleReconcile();
       },
       unsubscribe: () => {
         this.subscriptions.delete(record);
+        this.settleOwnership();
         this.scheduleReconcile();
       },
     };
+  }
+
+  /**
+   * 订阅集合一变就结算所有权，不能等 reconcile 的 microtask。
+   *
+   * 冷启动首次解析时资产还没写进 currentUnion，这期间被移除的话 reconcile 的
+   * removed 里根本看不到它，在飞的 resolver 会继续降层请求并写回状态。
+   * union 是所有 active subscriber 的并集，所以移除其中一个 subscriber
+   * 不会误伤仍被别人订阅的资产。
+   */
+  private settleOwnership(): void {
+    const union = this.activeUnion();
+    for (const key of this.wanted) {
+      if (union.has(key)) continue;
+      this.invalidateAsset(key);
+      this.refreshInFlight.delete(key);
+      this.resolutionHandoff.delete(key);
+      // 重新选回来是用户动作，应当立刻重试，不该继承上一次的节流窗口
+      for (const tier of [1, 2, 3] as const) this.candidateProbedAt.delete(probeKey(key, tier));
+    }
+    this.wanted = union;
   }
 
   /** 对指定 AssetKey（默认为当前 active union）立即做一次 targeted 刷新 */
@@ -201,6 +264,9 @@ export class PriceService {
         this.resolved.delete(key);
         this.effectiveTier.delete(key);
         this.unavailable.delete(key);
+        // 上一轮 resolution 的证据与节流窗口都是针对旧 mapping 的，必须一并作废
+        this.resolutionHandoff.delete(key);
+        for (const tier of [1, 2, 3] as const) this.candidateProbedAt.delete(probeKey(key, tier));
       }
       this.scheduleReconcile();
     });
@@ -231,7 +297,9 @@ export class PriceService {
     this.unavailable.clear();
     this.refreshInFlight.clear();
     this.assetEpoch.clear();
-    this.resolutionQuotedTier.clear();
+    this.wanted.clear();
+    this.resolutionHandoff.clear();
+    this.candidateProbedAt.clear();
     this.recoveryEpoch += 1;
     this.desiredInstruments = [];
     this.desiredFingerprint = '';
@@ -255,7 +323,7 @@ export class PriceService {
       await this.ensureRestored();
       await Promise.resolve();
       if (this.reconcilePromise) await this.reconcilePromise;
-      await Promise.all(Array.from(this.resolving.values()));
+      await Promise.all(Array.from(this.resolving.values(), (entry) => entry.promise));
       await Promise.all(Array.from(this.refreshInFlight.values()));
       if (!this.reconcileScheduled && this.refreshInFlight.size === 0 && !this.reconcilePromise) {
         return;
@@ -306,15 +374,14 @@ export class PriceService {
     this.currentUnion = union;
 
     for (const key of removed) {
-      // 在飞的 refresh 必须立刻失去所有权，否则它返回后还会继续降层并写回状态
-      this.invalidateAsset(key);
+      // settleOwnership 已经吊销了 owner token，这里只清残留状态
       this.quotes.dropAsset(key);
       this.refreshInFlight.delete(key);
       // 报价证据已丢弃，由它推导出的层级决定也不能留，否则重新选回来会永远停在下沉层
       this.effectiveTier.delete(key);
       this.resolved.delete(key);
       this.unavailable.delete(key);
-      this.resolutionQuotedTier.delete(key);
+      this.resolutionHandoff.delete(key);
     }
 
     if (union.size === 0) {
@@ -349,9 +416,9 @@ export class PriceService {
     this.assetEpoch.set(assetKey, this.epochOf(assetKey) + 1);
   }
 
-  /** 这次异步操作是否仍然拥有该资产：token 未变且资产仍在 active union 里 */
-  private stillOwns(assetKey: AssetKey, epoch: number): boolean {
-    return this.epochOf(assetKey) === epoch && this.currentUnion.has(assetKey);
+  /** 这次异步操作是否仍然拥有该资产：token 未变，且仍被某个 active subscriber 需要 */
+  private ownsAsset(assetKey: AssetKey, epoch: number): boolean {
+    return this.epochOf(assetKey) === epoch && this.wanted.has(assetKey);
   }
 
   /** 传输层落地：先让状态机判定模式，再把当前 desired set 应用到已开的连接上 */
@@ -424,19 +491,32 @@ export class PriceService {
     // catalog 刷新时会由 onUpdate 主动失效，所以缓存空结果是安全的
     const existing = this.resolved.get(assetKey);
     if (existing) return Promise.resolve(existing);
-    const pending = this.resolving.get(assetKey);
-    if (pending) return pending;
 
-    const promise = this.doResolve(assetKey).finally(() => {
-      this.resolving.delete(assetKey);
+    const epoch = this.epochOf(assetKey);
+    const pending = this.resolving.get(assetKey);
+    // 资产移除又重新加入后 owner token 已经变了，旧 resolver 的结果不能再交给新 owner
+    if (pending && pending.epoch === epoch) return pending.promise;
+
+    const entry: { epoch: number; promise: Promise<VenueInstrument[]> } = {
+      epoch,
+      promise: null as unknown as Promise<VenueInstrument[]>,
+    };
+    entry.promise = this.doResolve(assetKey, epoch).finally(() => {
+      // 旧 resolver 不能删掉新 owner 建立的记录
+      if (this.resolving.get(assetKey) === entry) this.resolving.delete(assetKey);
     });
-    this.resolving.set(assetKey, promise);
-    return promise;
+    this.resolving.set(assetKey, entry);
+    return entry.promise;
   }
 
-  private async doResolve(assetKey: AssetKey): Promise<VenueInstrument[]> {
+  /**
+   * 冷启动解析。每次 await 之后都要重新确认所有权：资产失效后既不请求下一层，
+   * 也不写 QuoteStore / resolved / effectiveTier / unavailable / catalog 缓存。
+   */
+  private async doResolve(assetKey: AssetKey, epoch: number): Promise<VenueInstrument[]> {
     // 只读本地 catalog 缓存；解析永远不会触发远程 catalog 刷新
     await exchangeCatalog.loadCachedOnly();
+    if (!this.ownsAsset(assetKey, epoch)) return [];
 
     const fromCatalog = catalogInstrumentsFor(assetKey);
     if (fromCatalog.length > 0) {
@@ -447,17 +527,24 @@ export class PriceService {
 
     // 冷启动只验证到第一个可用层为止；更低层留给 fallback 当轮按需验证，
     // 免得一上来就为用不到的层多打一轮请求
+    const attempted = new Set<SourceTier>();
+    let quotedTier: SourceTier | null = null;
     const verified: VenueInstrument[] = [];
     for (const tier of [1, 2] as const) {
-      const discovered = await this.verifyCandidates(assetKey, tier);
-      if (discovered.length === 0) continue;
-      verified.push(...discovered);
+      if (!this.ownsAsset(assetKey, epoch)) return [];
+      const probe = await this.verifyCandidates(assetKey, tier, epoch);
+      if (!this.ownsAsset(assetKey, epoch)) return [];
+      if (probe.attempted) attempted.add(tier);
+      if (probe.instruments.length === 0) continue;
+      verified.push(...probe.instruments);
+      quotedTier = tier;
       this.setEffectiveTier(assetKey, tier);
-      this.resolutionQuotedTier.set(assetKey, tier);
       break;
     }
 
     this.resolved.set(assetKey, verified);
+    // 本轮试过的层（成功或失败）都不该被紧随其后的首刷重打一遍
+    this.resolutionHandoff.set(assetKey, { epoch, attempted, quotedTier });
     if (verified.length === 0) {
       this.unavailable.add(assetKey);
     } else {
@@ -467,39 +554,85 @@ export class PriceService {
     return verified;
   }
 
+  /** 一次性取用 resolution 证据；owner 对不上说明是别人留下的，不能用 */
+  private takeResolutionHandoff(assetKey: AssetKey, epoch: number): ResolutionHandoff | null {
+    const handoff = this.resolutionHandoff.get(assetKey);
+    if (!handoff) return null;
+    this.resolutionHandoff.delete(assetKey);
+    return handoff.epoch === epoch ? handoff : null;
+  }
+
+  /** 这一层能生成、但还没被验证进 resolved 的 candidate */
+  private unresolvedCandidates(assetKey: AssetKey, tier: SourceTier): VenueInstrument[] {
+    const resolvedIds = new Set((this.resolved.get(assetKey) ?? []).map(instrumentId));
+    return candidateInstruments(assetKey, tier).filter((c) => !resolvedIds.has(instrumentId(c)));
+  }
+
   /**
-   * 定向验证一批 candidate，只返回真的拿到可用报价的那些。
+   * 值得反复低频重试的 candidate。
+   *
+   * 只保留 catalog 尚未真正刷新过的 venue：已经拉过完整 instrument 列表的 venue 就是
+   * 「它到底挂没挂这个标的」的权威，没被它列出来的再怎么定向探测也不会有行情。
+   * mergeResolvedInstruments 写回的自验证 mapping 不推进 venue 时间戳，
+   * 所以冷启动自己发现的那几条不会被误当成权威。
+   */
+  private pendingCandidates(assetKey: AssetKey, tier: SourceTier): VenueInstrument[] {
+    const unverifiedVenues = new Set(exchangeCatalog.staleVenues());
+    if (unverifiedVenues.size === 0) return [];
+    return this.unresolvedCandidates(assetKey, tier).filter((c) => unverifiedVenues.has(c.venue));
+  }
+
+  /** 首次尝试不限频；之后同一（资产, 层）的 candidate 验证最多 5 分钟一次 */
+  private mayProbeCandidates(assetKey: AssetKey, tier: SourceTier): boolean {
+    const at = this.candidateProbedAt.get(probeKey(assetKey, tier));
+    return at == null || Date.now() - at >= CANDIDATE_RETRY_MS;
+  }
+
+  private markCandidateProbe(assetKey: AssetKey, tier: SourceTier): void {
+    this.candidateProbedAt.set(probeKey(assetKey, tier), Date.now());
+  }
+
+  /**
+   * 定向验证这一层还没验上的 candidate，只返回真的拿到可用报价的那些。
    * 未验证的 candidate 绝不会进入 resolved，也就不会被 WebSocket 订阅。
    */
   private async verifyCandidates(
     assetKey: AssetKey,
     tier: SourceTier,
-    epoch?: number,
-  ): Promise<VenueInstrument[]> {
-    const candidates = candidateInstruments(assetKey, tier);
-    if (candidates.length === 0) return [];
+    epoch: number,
+    options: { throttle?: boolean } = {},
+  ): Promise<CandidateProbe> {
+    const candidates = this.unresolvedCandidates(assetKey, tier);
+    // 结构性没有 candidate（crypto:USDT、FX）：稳定不可用，永远不产生请求
+    if (candidates.length === 0) return { attempted: false, instruments: [] };
+    if (options.throttle && !this.mayProbeCandidates(assetKey, tier)) {
+      return { attempted: false, instruments: [] };
+    }
+    this.markCandidateProbe(assetKey, tier);
 
     const quotes = await fetchTargetedQuotes(candidates);
-    if (epoch !== undefined && !this.stillOwns(assetKey, epoch)) return [];
+    if (!this.ownsAsset(assetKey, epoch)) return { attempted: true, instruments: [] };
 
     const now = Date.now();
     const usable = quotes.filter((quote) => isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS));
-    if (usable.length === 0) return [];
+    if (usable.length === 0) return { attempted: true, instruments: [] };
 
     const liveIds = new Set(usable.map((quote) => `${quote.venue}|${quote.instrumentId}`));
     for (const quote of usable) this.quotes.ingest(quote);
-    return candidates.filter((c) => liveIds.has(`${c.venue}|${c.instrumentId}`));
+    return {
+      attempted: true,
+      instruments: candidates.filter((c) => liveIds.has(instrumentId(c))),
+    };
   }
 
   private appendResolved(assetKey: AssetKey, instruments: VenueInstrument[]): void {
     if (instruments.length === 0) return;
     const existing = this.resolved.get(assetKey) ?? [];
-    const seen = new Set(existing.map((i) => `${i.venue}|${i.instrumentId}`));
+    const seen = new Set(existing.map(instrumentId));
     const merged = existing.slice();
     for (const instrument of instruments) {
-      const id = `${instrument.venue}|${instrument.instrumentId}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
+      if (seen.has(instrumentId(instrument))) continue;
+      seen.add(instrumentId(instrument));
       merged.push(instrument);
     }
     this.resolved.set(assetKey, merged);
@@ -510,10 +643,11 @@ export class PriceService {
   // ============ 报价获取 ============
 
   private async doRefresh(assetKeys: AssetKey[]): Promise<void> {
-    await Promise.all(assetKeys.map((key) => this.ensureResolved(key)));
-    await Promise.all(assetKeys.map((key) => this.refreshTiers(key)));
+    const owners = assetKeys.map((key) => ({ key, epoch: this.epochOf(key) }));
+    await Promise.all(owners.map(({ key }) => this.ensureResolved(key)));
+    await Promise.all(owners.map(({ key, epoch }) => this.refreshTiers(key, epoch)));
 
-    const live = assetKeys.filter((key) => this.currentUnion.has(key));
+    const live = owners.filter((o) => this.ownsAsset(o.key, o.epoch)).map((o) => o.key);
     for (const key of live) this.recompute(key);
     if (live.length === 0) return;
     this.syncDesiredInstruments();
@@ -526,23 +660,22 @@ export class PriceService {
    * 当前层在 resolved 里不存在时按需验证 candidate，验证通过才追加进 resolved。
    * 每次 await 之后都要重新确认所有权，失效后既不发下一层请求也不写任何状态。
    */
-  private async refreshTiers(assetKey: AssetKey): Promise<void> {
-    if (this.unavailable.has(assetKey)) return;
-
-    const epoch = this.epochOf(assetKey);
-    const quotedTier = this.resolutionQuotedTier.get(assetKey);
-    this.resolutionQuotedTier.delete(assetKey);
+  private async refreshTiers(assetKey: AssetKey, epoch: number): Promise<void> {
+    const handoff = this.takeResolutionHandoff(assetKey, epoch);
 
     for (const tier of [1, 2, 3] as const) {
-      if (!this.stillOwns(assetKey, epoch)) return;
+      if (!this.ownsAsset(assetKey, epoch)) return;
 
-      // candidate 验证刚在这一层取到过可用报价，本轮不再重复请求
-      if (quotedTier === tier && this.hasUsableQuote(assetKey, tier)) return;
+      // 刚刚的 resolution 已经试过这一层：成功就直接收工，失败也不在同一轮重打
+      if (handoff?.attempted.has(tier)) {
+        if (handoff.quotedTier === tier && this.hasUsableQuote(assetKey, tier)) return;
+        continue;
+      }
 
       const instruments = this.instrumentsInTier(assetKey, tier);
       if (instruments.length > 0) {
         const quotes = await fetchTargetedQuotes(instruments);
-        if (!this.stillOwns(assetKey, epoch)) return;
+        if (!this.ownsAsset(assetKey, epoch)) return;
         const now = Date.now();
         const usable = quotes.filter((quote) => isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS));
         for (const quote of usable) this.quotes.ingest(quote);
@@ -550,15 +683,17 @@ export class PriceService {
           this.setEffectiveTier(assetKey, tier);
           return;
         }
+        // 同层缺失的 venue 留给低频恢复探测补，这里不追加请求
         continue;
       }
 
-      // resolved 里没有这一层：按需验证候选。Hyperliquid 不产出 candidate，
-      // HIP-3 只能来自经过 deployer 校验的 catalog
-      const discovered = await this.verifyCandidates(assetKey, tier, epoch);
-      if (discovered.length === 0) continue;
-      if (!this.stillOwns(assetKey, epoch)) return;
-      this.appendResolved(assetKey, discovered);
+      // resolved 里没有这一层：按需验证候选。首次不限频，之后每 5 分钟一次，
+      // 所以瞬时失败既不会永久负缓存，也不会被 60 秒的 passive tick 反复重打。
+      // Hyperliquid 不产出 candidate，HIP-3 只能来自经过 deployer 校验的 catalog
+      const probe = await this.verifyCandidates(assetKey, tier, epoch, { throttle: true });
+      if (!this.ownsAsset(assetKey, epoch)) return;
+      if (probe.instruments.length === 0) continue;
+      this.appendResolved(assetKey, probe.instruments);
       this.setEffectiveTier(assetKey, tier);
       return;
     }
@@ -567,6 +702,7 @@ export class PriceService {
   /** 换层时必须清掉别的层的残留报价，否则上一层的旧价会一直压住新层 */
   private setEffectiveTier(assetKey: AssetKey, tier: SourceTier): void {
     this.effectiveTier.set(assetKey, tier);
+    this.unavailable.delete(assetKey);
     this.quotes.dropWhere(assetKey, (quote) => productTier(quote.productKind) !== tier);
   }
 
@@ -586,25 +722,55 @@ export class PriceService {
       .map((i) => `${i.venue}|${i.instrumentId}`)
       .sort()
       .join(',');
-    if (fingerprint === this.desiredFingerprint) return;
-    this.desiredFingerprint = fingerprint;
-    this.desiredInstruments = next;
+    if (fingerprint !== this.desiredFingerprint) {
+      this.desiredFingerprint = fingerprint;
+      this.desiredInstruments = next;
+    }
+    // desired set 为空也要落地：一个还没验证出 instrument 的资产仍然需要
+    // lifecycle 进入 REALTIME，才能排上 5 分钟的低频恢复探测
     this.applyTransport();
   }
 
   /**
-   * effective tier 掉到 Tier 1 以下时的低频恢复探测。REALTIME 下没有周期性 REST，
-   * 没有这个 timer 的话 Tier 1 恢复要等到用户下次操作才会被发现。
+   * REALTIME 下唯一的周期性 REST，5 分钟一轮，承担三件事：
+   *  - effective tier 掉档后探测能否升回 Tier 1
+   *  - 补验同层缺失的 venue（瞬时失败没验上的那些）
+   *  - 完全没有可用报价的资产重试全部已知 instrument 与 candidate
+   *
+   * 结构性没有 candidate 的资产（crypto:USDT、FX）在这里返回空，因此不会成为 target，
+   * 也就不会有 timer。
    */
+  private recoveryProbeInstruments(assetKey: AssetKey): VenueInstrument[] {
+    const out: VenueInstrument[] = [];
+    const seen = new Set<string>();
+    const push = (list: VenueInstrument[]) => {
+      for (const instrument of list) {
+        if (seen.has(instrumentId(instrument))) continue;
+        seen.add(instrumentId(instrument));
+        out.push(instrument);
+      }
+    };
+
+    const effective = this.effectiveTier.get(assetKey);
+    if (effective == null) {
+      push(this.resolved.get(assetKey) ?? []);
+      push(this.pendingCandidates(assetKey, 1));
+      push(this.pendingCandidates(assetKey, 2));
+      return out;
+    }
+    if (effective > 1) {
+      // resolved 里没有 Tier 1 也要能恢复：冷启动直接降到 Tier 2 的资产就是这种情况
+      const tierOne = this.instrumentsInTier(assetKey, 1);
+      push(tierOne.length > 0 ? tierOne : this.pendingCandidates(assetKey, 1));
+    }
+    push(this.pendingCandidates(assetKey, effective));
+    return out;
+  }
+
   private recoveryTargets(): AssetKey[] {
     const out: AssetKey[] = [];
     for (const key of this.currentUnion) {
-      const tier = this.effectiveTier.get(key);
-      if (!tier || tier <= 1) continue;
-      // resolved 里没有 Tier 1 也要能恢复：冷启动直接降到 Tier 2 的资产就是这种情况
-      if (this.instrumentsInTier(key, 1).length > 0 || candidateInstruments(key, 1).length > 0) {
-        out.push(key);
-      }
+      if (this.recoveryProbeInstruments(key).length > 0) out.push(key);
     }
     return out;
   }
@@ -618,7 +784,7 @@ export class PriceService {
       if (epoch !== this.recoveryEpoch) return;
       const targets = this.recoveryTargets();
       if (targets.length === 0) return;
-      void this.probeTierOne(targets, epoch).finally(() => {
+      void this.probeRecovery(targets, epoch).finally(() => {
         // probe 执行期间可能已经进入 passive / freeze / off，这时绝不能再挂回 timer
         if (epoch !== this.recoveryEpoch) return;
         if (this.lifecycle.getMode() !== 'realtime') return;
@@ -627,52 +793,55 @@ export class PriceService {
     }, TIER_RECOVERY_PROBE_MS);
   }
 
-  private async probeTierOne(assetKeys: AssetKey[], epoch: number): Promise<void> {
-    const owners = assetKeys.map((key) => ({ key, assetEpoch: this.epochOf(key) }));
-    const instruments: VenueInstrument[] = [];
-    const candidateOnly = new Map<AssetKey, VenueInstrument[]>();
-
-    for (const { key } of owners) {
-      const resolvedTierOne = this.instrumentsInTier(key, 1);
-      if (resolvedTierOne.length > 0) {
-        instruments.push(...resolvedTierOne);
-        continue;
-      }
-      const candidates = candidateInstruments(key, 1);
-      if (candidates.length === 0) continue;
-      candidateOnly.set(key, candidates);
-      instruments.push(...candidates);
-    }
+  private async probeRecovery(assetKeys: AssetKey[], epoch: number): Promise<void> {
+    const owners = assetKeys
+      .map((key) => ({
+        key,
+        assetEpoch: this.epochOf(key),
+        probing: this.recoveryProbeInstruments(key),
+      }))
+      .filter((owner) => owner.probing.length > 0);
+    const instruments = owners.flatMap((owner) => owner.probing);
     if (instruments.length === 0) return;
+
+    // 这一轮就是 candidate 的 5 分钟重试窗口；记账后紧跟着的 passive tick 不会重复打
+    for (const owner of owners) {
+      for (const tier of new Set(owner.probing.map(instrumentTier))) {
+        this.markCandidateProbe(owner.key, tier);
+      }
+    }
 
     const quotes = await fetchTargetedQuotes(instruments).catch(() => [] as VenueQuote[]);
     if (epoch !== this.recoveryEpoch) return;
 
     const now = Date.now();
-    const recovered = new Map<AssetKey, VenueQuote[]>();
-    for (const quote of quotes) {
-      if (!isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS)) continue;
-      const owner = owners.find((o) => o.key === quote.assetKey);
-      if (!owner || !this.stillOwns(owner.key, owner.assetEpoch)) continue;
-      const list = recovered.get(quote.assetKey);
-      if (list) list.push(quote);
-      else recovered.set(quote.assetKey, [quote]);
-    }
-    if (recovered.size === 0) return;
+    let changed = false;
+    for (const owner of owners) {
+      if (!this.ownsAsset(owner.key, owner.assetEpoch)) continue;
+      const usable = quotes.filter(
+        (quote) => quote.assetKey === owner.key && isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS),
+      );
+      if (usable.length === 0) continue;
 
-    for (const [key, assetQuotes] of recovered) {
-      const candidates = candidateOnly.get(key);
-      if (candidates) {
-        const liveIds = new Set(assetQuotes.map((q) => `${q.venue}|${q.instrumentId}`));
-        this.appendResolved(
-          key,
-          candidates.filter((c) => liveIds.has(`${c.venue}|${c.instrumentId}`)),
-        );
+      // 只接受本轮最优（最低）层的结果，绝不把两层混进同一个资产
+      const best = Math.min(...usable.map((quote) => productTier(quote.productKind))) as SourceTier;
+      const current = this.effectiveTier.get(owner.key);
+      if (current != null && current < best) continue;
+
+      const liveIds = new Set(usable.map((quote) => `${quote.venue}|${quote.instrumentId}`));
+      this.appendResolved(
+        owner.key,
+        owner.probing.filter((i) => liveIds.has(instrumentId(i))),
+      );
+      for (const quote of usable) {
+        if (productTier(quote.productKind) !== best) continue;
+        this.quotes.ingest(quote);
       }
-      for (const quote of assetQuotes) this.quotes.ingest(quote);
-      this.setEffectiveTier(key, 1);
-      this.recompute(key);
+      this.setEffectiveTier(owner.key, best);
+      this.recompute(owner.key);
+      changed = true;
     }
+    if (!changed) return;
     this.syncDesiredInstruments();
     this.notifyNow();
   }
