@@ -1,6 +1,6 @@
 /**
  * Rate Monitor Widget - 币圈汇率组件
- * 
+ *
  * 功能:
  * - 显示稳定币 (USDT/USDC) 与法币 (USD/CNY/JPY/KRW) 之间的汇率
  * - 支持切换货币对和交换显示方向
@@ -8,7 +8,7 @@
  * - 数据来源: CoinGecko (主源) + Upbit (仅补 KRW)
  * - 使用 Portal 渲染下拉菜单，避免被父组件 overflow 裁剪
  * - 每个实例的设置独立存储在 GridElement.state.settings 中
- * 
+ *
  * 风格: Bloomberg Terminal Dark Theme
  */
 
@@ -40,10 +40,10 @@ const CURRENCY_LABELS: Record<Stablecoin | FiatCurrency, string> = {
 
 // 货币精度配置
 const RATE_PRECISION: Record<FiatCurrency, number> = {
-  USD: 4,  // USDT/USD ≈ 1.0001
-  CNY: 2,  // USDT/CNY ≈ 7.24
-  JPY: 1,  // USDT/JPY ≈ 153.8
-  KRW: 0,  // USDT/KRW ≈ 1450
+  USD: 4, // USDT/USD ≈ 1.0001
+  CNY: 2, // USDT/CNY ≈ 7.24
+  JPY: 1, // USDT/JPY ≈ 153.8
+  KRW: 0, // USDT/KRW ≈ 1450
 };
 
 // 图标组件 - 使用函数返回新的 JSX，避免 SolidJS 复用同一个 DOM 节点
@@ -65,34 +65,45 @@ const LiveDot = () => (
 );
 
 const SwapIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
     <path d="M8 7H20M20 7L16 3M20 7l-4 4" />
     <path d="M16 17H4M4 17l4-4M4 17l4 4" />
   </svg>
 );
 
-const USDT_LOGO = new URL('../../../design/widgets/rate-monitor/usdt-logo.png', import.meta.url).href;
-const USDC_LOGO = new URL('../../../design/widgets/rate-monitor/usdc-logo.png', import.meta.url).href;
+const USDT_LOGO = new URL('../../../design/widgets/rate-monitor/usdt-logo.png', import.meta.url)
+  .href;
+const USDC_LOGO = new URL('../../../design/widgets/rate-monitor/usdc-logo.png', import.meta.url)
+  .href;
 
 // 格式化汇率
 function formatRate(rate: number | null, fiat: FiatCurrency, swapped: boolean): string {
   if (rate === null) return '--';
-  
-  const precision = swapped 
+
+  const precision = swapped
     ? Math.max(6 - RATE_PRECISION[fiat], 2) // 反向时需要更多小数位
     : RATE_PRECISION[fiat];
-  
+
   return rate.toFixed(precision);
 }
 
 // 根据字符串长度计算字体大小
 function getFontSize(rateStr: string): number {
   const len = rateStr.length;
-  if (len <= 4) return 22;      // 7.24
-  if (len <= 5) return 20;      // 153.8
-  if (len <= 6) return 17;      // 1450.0 or 0.0065
-  if (len <= 7) return 14;      // 0.00069
-  return 12;                    // 0.000689 or longer
+  if (len <= 4) return 22; // 7.24
+  if (len <= 5) return 20; // 153.8
+  if (len <= 6) return 17; // 1450.0 or 0.0065
+  if (len <= 7) return 14; // 0.00069
+  return 12; // 0.000689 or longer
 }
 
 // 下拉菜单类型
@@ -115,14 +126,14 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
       swapped: settings?.swapped ?? DEFAULT_RATE_MONITOR_SETTINGS.swapped,
     };
   };
-  
+
   const initialSettings = getSettings();
-  
+
   const [dataState, setDataState] = createSignal<RateDataState>(rateMonitorService.getState());
   const [stablecoin, setStablecoin] = createSignal<Stablecoin>(initialSettings.stablecoin);
   const [fiat, setFiat] = createSignal<FiatCurrency>(initialSettings.fiat);
   const [swapped, setSwapped] = createSignal<boolean>(initialSettings.swapped);
-  
+
   // 下拉菜单状态
   const [activeMenu, setActiveMenu] = createSignal<MenuType>(null);
   const [menuPosition, setMenuPosition] = createSignal<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -136,13 +147,13 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
   // 保存设置到实例 state
   const saveSettings = (newSettings: Partial<RateMonitorSettings>) => {
     if (!props.onStateChange) return;
-    
+
     const currentSettings = getSettings();
     const updatedSettings: RateMonitorSettings = {
       ...currentSettings,
       ...newSettings,
     };
-    
+
     props.onStateChange({
       ...props.state,
       settings: updatedSettings,
@@ -179,7 +190,9 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
   const fontSize = createMemo(() => getFontSize(rateString()));
 
   // 背景 logo
-  const backgroundLogo = createMemo(() => `url(${stablecoin() === 'USDT' ? USDT_LOGO : USDC_LOGO})`);
+  const backgroundLogo = createMemo(
+    () => `url(${stablecoin() === 'USDT' ? USDT_LOGO : USDC_LOGO})`,
+  );
 
   // 切换稳定币
   const selectStablecoin = (coin: Stablecoin) => {
@@ -210,7 +223,7 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
   // 打开菜单并计算位置
   const openMenu = (type: MenuType, btnRef: HTMLButtonElement | undefined) => {
     if (!btnRef) return;
-    
+
     const rect = btnRef.getBoundingClientRect();
     setMenuPosition({
       x: rect.left + rect.width / 2,
@@ -241,39 +254,43 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
     }
   };
 
+  const statusLabel = () => {
+    const s = dataState().status;
+    if (s === 'syncing' || s === 'idle') return 'SYNCING';
+    if (s === 'stale' || s === 'degraded') return 'CACHED';
+    if (s === 'error') return 'RETRY';
+    return 'LIVE';
+  };
+
   // 左侧货币 (根据 swap 状态)
-  const leftCurrency = () => swapped() ? fiat() : stablecoin();
-  const rightCurrency = () => swapped() ? stablecoin() : fiat();
+  const leftCurrency = () => (swapped() ? fiat() : stablecoin());
+  const rightCurrency = () => (swapped() ? stablecoin() : fiat());
 
   return (
     <div class="rate-monitor">
       <div class="rate-monitor__ghost-logo" style={{ 'background-image': backgroundLogo() }} />
       {/* 状态指示器 */}
       <div class="rate-monitor__status">
-        <Show
-          when={dataState().status === 'syncing'}
-          fallback={
-            <div class="rate-monitor__status-content rate-monitor__status-content--live">
-              <span class="rate-monitor__status-icon"><LiveDot /></span>
-              <span class="rate-monitor__status-text">LIVE</span>
-            </div>
-          }
+        <div
+          classList={{
+            'rate-monitor__status-content': true,
+            'rate-monitor__status-content--live': dataState().status === 'live',
+          }}
+          title={dataState().error}
         >
-          <div class="rate-monitor__status-content">
-            <span class="rate-monitor__status-icon"><SyncingIcon /></span>
-            <span class="rate-monitor__status-text">SYNCING</span>
-          </div>
-        </Show>
+          <span class="rate-monitor__status-icon">
+            <Show when={statusLabel() === 'SYNCING'} fallback={<LiveDot />}>
+              <SyncingIcon />
+            </Show>
+          </span>
+          <span class="rate-monitor__status-text">{statusLabel()}</span>
+        </div>
       </div>
 
       {/* 货币对选择器 */}
       <div class="rate-monitor__pair">
         {/* 左侧货币 */}
-        <button
-          ref={leftBtnRef}
-          class="rate-monitor__currency-btn"
-          onClick={handleLeftClick}
-        >
+        <button ref={leftBtnRef} class="rate-monitor__currency-btn" onClick={handleLeftClick}>
           {CURRENCY_LABELS[leftCurrency()]}
         </button>
 
@@ -283,21 +300,14 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
         </button>
 
         {/* 右侧货币 */}
-        <button
-          ref={rightBtnRef}
-          class="rate-monitor__currency-btn"
-          onClick={handleRightClick}
-        >
+        <button ref={rightBtnRef} class="rate-monitor__currency-btn" onClick={handleRightClick}>
           {CURRENCY_LABELS[rightCurrency()]}
         </button>
       </div>
 
       {/* 汇率显示 */}
       <div class="rate-monitor__rate">
-        <span
-          class="rate-monitor__rate-value"
-          style={{ 'font-size': `${fontSize()}px` }}
-        >
+        <span class="rate-monitor__rate-value" style={{ 'font-size': `${fontSize()}px` }}>
           {rateString()}
         </span>
       </div>
@@ -311,7 +321,7 @@ export const RateMonitorWidget = (props: RateMonitorWidgetProps) => {
           <>
             {/* 点击外部关闭 overlay */}
             <div class="rate-monitor__overlay" onClick={closeMenu} />
-            
+
             {/* 下拉菜单 */}
             <div
               class="rate-monitor__dropdown"

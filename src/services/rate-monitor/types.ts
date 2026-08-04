@@ -32,7 +32,7 @@ export interface AllRates {
 }
 
 /** 服务状态；degraded 表示部分法币这一轮没有拿到新值，展示的是上一轮缓存 */
-export type RateStatus = 'idle' | 'syncing' | 'live' | 'degraded' | 'error';
+export type RateStatus = 'idle' | 'syncing' | 'live' | 'stale' | 'degraded' | 'error';
 
 /** 服务数据状态 */
 export interface RateDataState {

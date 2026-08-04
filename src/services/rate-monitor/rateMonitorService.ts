@@ -33,8 +33,13 @@ import type {
 /** localStorage 缓存键 */
 const CACHE_KEY = 'rate_monitor_cache';
 
-/** 缓存版本号 */
-const CACHE_VERSION = 'v1';
+/**
+ * 缓存版本号。
+ * v1 的 rates 可能来自已经删除的 Pyth 兜底路径，不能继续当作有效行情，
+ * 只把用户的 selection 迁移过来。
+ */
+const CACHE_VERSION = 'v2';
+const OBSOLETE_CACHE_VERSIONS = ['v1'];
 
 /** 默认轮询间隔 (毫秒) - 10 分钟 */
 const DEFAULT_POLL_INTERVAL = 10 * 60 * 1000;
@@ -72,6 +77,16 @@ function getCache(): RateCacheData | null {
 
     const data: RateCacheData = JSON.parse(raw);
     if (data.version !== CACHE_VERSION) {
+      if (OBSOLETE_CACHE_VERSIONS.includes(data.version) && data.selection) {
+        // 只保留 selection，旧 rates 一律丢弃
+        setCache(createEmptyRates(), data.selection);
+        return {
+          version: CACHE_VERSION,
+          timestamp: 0,
+          rates: createEmptyRates(),
+          selection: data.selection,
+        };
+      }
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
@@ -280,15 +295,14 @@ class RateMonitorService {
   /** 从缓存加载数据 */
   private loadFromCache(): void {
     const cache = getCache();
-    if (cache) {
-      this.state = {
-        status: 'live',
-        rates: cache.rates,
-        lastSync: cache.timestamp,
-      };
-      this.selection = cache.selection;
-      console.log('[RateMonitor] Loaded from cache');
-    }
+    if (!cache) return;
+    this.selection = cache.selection;
+    // 缓存只用于首屏立即渲染，本次会话成功刷新之前不能显示成 live
+    this.state = {
+      status: 'stale',
+      rates: cache.rates,
+      lastSync: cache.timestamp,
+    };
   }
 
   /** 通知所有订阅者 */

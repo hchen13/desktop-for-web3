@@ -22,7 +22,8 @@
     "worker:dev": "cd worker && npm run dev",
     "worker:deploy": "cd worker && npm run deploy",
     "worker:deploy:staging": "cd worker && npm run deploy:staging",
-    "worker:install": "cd worker && npm install"
+    "worker:install": "cd worker && npm install",
+    "test:smoke": "node tests/smoke-exchange-prices.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

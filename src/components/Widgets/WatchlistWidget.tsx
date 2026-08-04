@@ -34,16 +34,32 @@ import type {
 import { DEFAULT_WATCHLIST_SETTINGS } from '../../config/widgetDefaults';
 
 const DRAG_THRESHOLD = 5;
+/** 配置损坏到解析不出 AssetKey 时的占位，保证渲染不崩且不会误配到别的资产 */
+const UNRESOLVED_ASSET_KEY = 'crypto:__UNRESOLVED__';
 const MISSING_PRICE_RETRY_DELAY_MS = 12000;
 const STALE_PRICE_MS = 5 * 60 * 1000;
 
-const formatPrice = (price: number): string => {
+const formatAmount = (price: number): string => {
   if (!Number.isFinite(price)) return '--';
   if (price >= 1) {
-    return `$${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+    return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
   // 小价位多保留几位
-  return `$${price.toLocaleString('en-US', { maximumFractionDigits: 8 }).replace(/0+$/, '').replace(/\.$/, '')}`;
+  return price
+    .toLocaleString('en-US', { maximumFractionDigits: 8 })
+    .replace(/0+$/, '')
+    .replace(/\.$/, '');
+};
+
+/**
+ * 只有真的以 USD 计价才用 $。交易所给的是 USDT / USDC 报价，
+ * 直接写成 $ 等于替用户断言它锚定在 1 美元。
+ */
+const formatPrice = (price: number, quoteCurrency: string): string => {
+  const amount = formatAmount(price);
+  if (amount === '--') return amount;
+  if (!quoteCurrency || quoteCurrency === 'USD') return `$${amount}`;
+  return amount;
 };
 
 const formatChange = (change: number | null): string => {
@@ -99,7 +115,10 @@ const PriceDisplay = (props: { snapshot: PriceSnapshot; now: number }) => {
         }}
         title={describeSnapshot(props.snapshot)}
       >
-        {formatPrice(props.snapshot.price)}
+        {formatPrice(props.snapshot.price, props.snapshot.quoteCurrency)}
+        <Show when={props.snapshot.quoteCurrency && props.snapshot.quoteCurrency !== 'USD'}>
+          <span class="price-item__quote">{props.snapshot.quoteCurrency}</span>
+        </Show>
       </span>
       <span class={`price-item__change ${cls()}`}>{formatChange(change())}</span>
     </div>
@@ -222,6 +241,10 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   };
 
   const initialSettings = getSettings();
+  const needsMigrationWriteBack = !sameSettings(
+    (props.state?.settings as WatchlistSettings | undefined)?.coins,
+    initialSettings.coins,
+  );
   const [coins, setCoins] = createSignal<WatchlistCoinSetting[]>(initialSettings.coins);
   const [snapshots, setSnapshots] = createSignal<Map<AssetKey, PriceSnapshot>>(new Map());
   const [isEditDialogOpen, setIsEditDialogOpen] = createSignal(false);
@@ -232,7 +255,7 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   const { ContextMenuComponent, showContextMenu } = useContextMenu();
 
   const assetKeys = createMemo<AssetKey[]>(() =>
-    coins().map((coin) => assetKeyFromSetting(coin) ?? `crypto:${coin.symbol.toUpperCase()}`),
+    coins().map((coin) => assetKeyFromSetting(coin) ?? UNRESOLVED_ASSET_KEY),
   );
 
   const getSnapshot = (assetKey: AssetKey): PriceSnapshot | null => {
@@ -315,6 +338,8 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
   });
 
   onMount(() => {
+    // 迁移只在内存里做会导致每次启动都重来一遍，结果也永远存不进 storage
+    if (needsMigrationWriteBack) saveSettings(coins());
     subscription = priceService.subscribe(new Set(assetKeys()), (next) => {
       setSnapshots(new Map(next));
     });
@@ -356,7 +381,10 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
       <Show when={getCurrentSlot() !== null}>
         <WatchlistEditDialog
           isOpen={isEditDialogOpen()}
-          onClose={() => setIsEditDialogOpen(false)}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setEditSlotIndex(undefined);
+          }}
           onConfirm={handleEditConfirm}
           currentSlot={getCurrentSlot()!}
           slotIndex={editSlotIndex()!}
@@ -436,6 +464,10 @@ export const WatchlistWidget = (props: WatchlistWidgetProps) => {
         .price-item__price--stale {
           color: var(--text-tertiary);
         }
+        .price-item__quote {
+          font-size: 9px; color: var(--text-tertiary);
+          margin-left: 2px; font-weight: 400;
+        }
         .price-item__change {
           font-size: 11px;
           font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -480,4 +512,20 @@ function migrateSetting(coin: WatchlistCoinSetting): WatchlistCoinSetting {
     category: meta?.category ?? coin.category ?? 'crypto',
     assetKey: key,
   };
+}
+
+function sameSettings(
+  before: WatchlistCoinSetting[] | undefined,
+  after: WatchlistCoinSetting[],
+): boolean {
+  if (!before || before.length !== after.length) return false;
+  return before.every((coin, i) => {
+    const next = after[i];
+    return (
+      coin.symbol === next.symbol &&
+      coin.name === next.name &&
+      coin.category === next.category &&
+      coin.assetKey === next.assetKey
+    );
+  });
 }

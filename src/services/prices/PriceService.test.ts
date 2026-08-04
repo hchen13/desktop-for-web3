@@ -63,11 +63,16 @@ function perp(
   });
 }
 
+function freshVenueTimestamps() {
+  const now = Date.now();
+  return { okx: now, bitget: now, binance: now, hyperliquid: now };
+}
+
 async function seedCatalog(instruments: VenueInstrument[]): Promise<void> {
   await chrome.storage.local.set({
     [EXCHANGE_CATALOG_STORAGE_KEY]: {
-      version: 'v1',
-      timestamp: Date.now(),
+      version: 'v2',
+      venueTimestamps: freshVenueTimestamps(),
       instruments,
     },
   });
@@ -423,6 +428,53 @@ describe('稳定订阅与 union', () => {
     expect(SilentSocket.instances.every((s) => !s.closed)).toBe(true);
   });
 
+  it('慢解析的旧 reconcile 恢复后不会覆盖新的 desired set', async () => {
+    await seedCatalog([spot('okx', 'SOL-USDT', 'SOL', 'crypto')]);
+    let releaseNvda: () => void = () => {};
+    const nvdaGate = new Promise<void>((resolve) => {
+      releaseNvda = resolve;
+    });
+    let nvdaRequested = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('NVDA')) {
+        nvdaRequested = true;
+        await nvdaGate;
+        return new Response('not found', { status: 404 });
+      }
+      if (url.includes('instId=SOL-USDT')) {
+        return new Response(
+          JSON.stringify({
+            code: '0',
+            data: [{ instId: 'SOL-USDT', last: '200', open24h: '198' }],
+          }),
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const flush = async () => {
+      for (let i = 0; i < 12; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    // NVDA 不在 catalog 里，走 candidate 网络验证并卡住
+    const sub = service.subscribe(new Set<AssetKey>(['stock:NVDA']), () => {});
+    await flush();
+    expect(nvdaRequested).toBe(true);
+
+    // 旧 reconcile 还挂着的时候换成 SOL，新一轮先跑完
+    sub.updateAssets(new Set<AssetKey>(['crypto:SOL']));
+    await flush();
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual(['SOL-USDT']);
+
+    releaseNvda();
+    await flush();
+
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual(['SOL-USDT']);
+    expect(service.__transportModeForTest()).toBe('realtime');
+    expect(service.__connectionCountForTest()).toBeGreaterThan(0);
+  });
+
   it('unsubscribe 后不再收到通知', async () => {
     await seedCatalog([spot('okx', 'BTC-USDT', 'BTC', 'crypto')]);
     mockQuoteFetch({ 'okx:BTC-USDT': 70000 }, { urls: [] });
@@ -558,6 +610,28 @@ describe('crypto:COIN 与 stock:COIN 不冲突', () => {
 });
 
 describe('perp fallback 与 BRK.B', () => {
+  it('资产被移出 union 后层级下沉复位，Tier 1 恢复即可回到现货', async () => {
+    await seedCatalog([spot('okx', 'XAAPL-USDT', 'AAPL'), perp('bitget', 'AAPLUSDT', 'AAPL')]);
+    const prices: Record<string, number> = { 'bitget:AAPLUSDT': 190 };
+    mockQuoteFetch(prices, { urls: [] });
+
+    const sub = service.subscribe(new Set<AssetKey>(['stock:AAPL']), () => {});
+    await service.__settleForTest();
+    // Tier 1 取不到报价 → 下沉到 Tier 2 的 equity perp
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual(['AAPLUSDT']);
+
+    prices['okx:XAAPL-USDT'] = 300;
+    sub.updateAssets(new Set<AssetKey>([]));
+    await service.__settleForTest();
+    sub.updateAssets(new Set<AssetKey>(['stock:AAPL']));
+    await service.__settleForTest();
+
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual([
+      'XAAPL-USDT',
+    ]);
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(300);
+  });
+
   it('BRK.B 命中 equity perp 并使用 index 价格', async () => {
     await seedCatalog([
       perp('bitget', 'BRKBUSDT', 'BRK.B'),

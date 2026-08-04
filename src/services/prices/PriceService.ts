@@ -30,12 +30,14 @@ import {
   catalogInstrumentsFor,
   fallbackMetaFor,
   instrumentTier,
+  productTier,
   type SourceTier,
 } from './instrumentResolver';
 import { QuoteStore } from './quoteStore';
 import { QuoteSocketPool } from './socket';
-import { TransportLifecycle, type TransportMode } from './lifecycle';
+import { TransportLifecycle, type ModeChangeContext, type TransportMode } from './lifecycle';
 import { fetchTargetedQuotes, SOCKET_ENDPOINTS } from './venues';
+import { isUsableQuote, TRADABLE_MAX_AGE_MS } from './venues/shared';
 
 const SNAPSHOT_STORAGE_KEY = 'prices_cache_v2';
 /** 上一代缓存 key，升级时直接清掉，绝不能当作 fresh exchange quote 复用 */
@@ -45,6 +47,8 @@ const OBSOLETE_STORAGE_KEYS = ['prices_cache_v1', 'pyth_catalog_v1'];
 export const WS_UNCOVERED_REFRESH_MS = 60_000;
 /** WebSocket 高频推送合并成 UI 通知的最小间隔 */
 export const NOTIFY_COALESCE_MS = 250;
+/** effective tier 掉档后重新定向探测 Tier 1 的间隔 */
+export const TIER_RECOVERY_PROBE_MS = 5 * 60_000;
 /** 各模式下报价的新鲜度窗口 */
 export const FRESHNESS_WINDOW_MS: Record<TransportMode, number> = {
   off: 5 * 60_000,
@@ -84,15 +88,19 @@ export class PriceService {
   private quotes = new QuoteStore();
   private resolved = new Map<AssetKey, VenueInstrument[]>();
   private resolving = new Map<AssetKey, Promise<VenueInstrument[]>>();
-  private tierFloor = new Map<AssetKey, SourceTier>();
+  private effectiveTier = new Map<AssetKey, SourceTier>();
   private unavailable = new Set<AssetKey>();
   private refreshInFlight = new Map<AssetKey, Promise<void>>();
 
   private pool = new QuoteSocketPool(SOCKET_ENDPOINTS, (quotes) => this.onSocketQuotes(quotes));
   private lifecycle = new TransportLifecycle({
     hasWork: () => this.desiredInstruments.length > 0,
-    onModeChange: (mode, previous) => this.onModeChange(mode, previous),
+    onModeChange: (mode, previous, ctx) => this.onModeChange(mode, previous, ctx),
     onPassiveTick: () => {
+      void this.refreshAssets().catch(() => {});
+    },
+    onResume: () => {
+      if (this.desiredInstruments.length === 0) return;
       void this.refreshAssets().catch(() => {});
     },
   });
@@ -100,10 +108,14 @@ export class PriceService {
   private currentUnion = new Set<AssetKey>();
 
   private reconcileScheduled = false;
+  private reconcileGeneration = 0;
   private reconcilePromise: Promise<void> | null = null;
   private notifyTimer: ReturnType<typeof setTimeout> | null = null;
   private uncoveredTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private desiredFingerprint = '';
   private restorePromise: Promise<void> | null = null;
+  private catalogUnsubscribe: (() => void) | null = null;
 
   getSnapshot(assetKey: AssetKey): PriceSnapshot | null {
     return this.snapshots.get(migrateAssetKey(assetKey)) ?? null;
@@ -121,6 +133,7 @@ export class PriceService {
     };
     this.subscriptions.add(record);
     void this.ensureRestored();
+    this.watchCatalog();
     this.scheduleReconcile();
     this.pushTo(record);
 
@@ -166,15 +179,34 @@ export class PriceService {
     await Promise.all(waiting);
   }
 
+  /**
+   * catalog 刷新后已选资产必须重新解析：冷启动时保存的 candidate mapping 可能只有
+   * Tier 2，而完整 catalog 里已经有 Tier 1 instrument 了。
+   */
+  private watchCatalog(): void {
+    if (this.catalogUnsubscribe) return;
+    this.catalogUnsubscribe = exchangeCatalog.onUpdate(() => {
+      for (const key of this.currentUnion) {
+        this.resolved.delete(key);
+        this.effectiveTier.delete(key);
+        this.unavailable.delete(key);
+      }
+      this.scheduleReconcile();
+    });
+  }
+
   /** 关闭所有行情连接与 timer */
   stopTransport(): void {
     this.pool.closeAll();
     this.clearUncoveredTimer();
+    this.clearRecoveryTimer();
   }
 
   __resetForTest(): void {
     this.lifecycle.stop();
     this.stopTransport();
+    this.catalogUnsubscribe?.();
+    this.catalogUnsubscribe = null;
     if (this.notifyTimer) {
       clearTimeout(this.notifyTimer);
       this.notifyTimer = null;
@@ -184,10 +216,11 @@ export class PriceService {
     this.quotes.clear();
     this.resolved.clear();
     this.resolving.clear();
-    this.tierFloor.clear();
+    this.effectiveTier.clear();
     this.unavailable.clear();
     this.refreshInFlight.clear();
     this.desiredInstruments = [];
+    this.desiredFingerprint = '';
     this.currentUnion.clear();
     this.reconcileScheduled = false;
     this.reconcilePromise = null;
@@ -237,15 +270,23 @@ export class PriceService {
     this.reconcileScheduled = true;
     queueMicrotask(() => {
       this.reconcileScheduled = false;
-      this.reconcilePromise = this.reconcile().finally(() => {
-        this.reconcilePromise = null;
+      const run: Promise<void> = this.reconcile().finally(() => {
+        if (this.reconcilePromise === run) this.reconcilePromise = null;
       });
+      this.reconcilePromise = run;
     });
   }
 
   private async reconcile(): Promise<void> {
+    const generation = ++this.reconcileGeneration;
     await this.ensureRestored();
     const union = this.activeUnion();
+    await Promise.all([...union].map((key) => this.ensureResolved(key)));
+
+    // reconcile 可重入。解析期间可能已经有新一轮跑完，陈旧的这一轮必须整体作废：
+    // 连 currentUnion 都不能写，否则新一轮算出的 added 会漏掉尚未首刷的资产
+    if (generation !== this.reconcileGeneration) return;
+
     const added = [...union].filter((key) => !this.currentUnion.has(key));
     const removed = [...this.currentUnion].filter((key) => !union.has(key));
     this.currentUnion = union;
@@ -253,18 +294,21 @@ export class PriceService {
     for (const key of removed) {
       this.quotes.dropAsset(key);
       this.refreshInFlight.delete(key);
+      // 报价证据已丢弃，由它推导出的层级决定也不能留，否则重新选回来会永远停在下沉层
+      this.effectiveTier.delete(key);
+      this.resolved.delete(key);
+      this.unavailable.delete(key);
     }
 
     if (union.size === 0) {
       this.desiredInstruments = [];
+      this.desiredFingerprint = '';
       this.applyTransport();
       return;
     }
 
-    await Promise.all([...union].map((key) => this.ensureResolved(key)));
     for (const key of union) this.recompute(key);
-    this.desiredInstruments = [...union].flatMap((key) => this.preferredInstruments(key));
-    this.applyTransport();
+    this.syncDesiredInstruments();
     this.notifyNow();
 
     if (added.length > 0) {
@@ -279,20 +323,24 @@ export class PriceService {
     if (this.lifecycle.getMode() === 'realtime' && this.desiredInstruments.length > 0) {
       this.pool.setDesiredInstruments(this.desiredInstruments);
       this.startUncoveredTimer();
+      this.startRecoveryTimer();
     }
   }
 
-  private onModeChange(mode: TransportMode, previous: TransportMode): void {
+  private onModeChange(mode: TransportMode, previous: TransportMode, ctx: ModeChangeContext): void {
     if (mode === 'realtime') {
       this.pool.setDesiredInstruments(this.desiredInstruments);
       this.startUncoveredTimer();
+      this.startRecoveryTimer();
       // 从 passive / off 回到 REALTIME 时立即补一次；宽限期内根本不会走到这里，
-      // 所以不会因为快速 focus/blur 抖动产生额外请求或重连
-      if (previous !== 'realtime') void this.refreshAssets().catch(() => {});
+      // 所以不会因为快速 focus/blur 抖动产生额外请求或重连。
+      // resume 已经统一刷过一次，这里不能再刷第二轮
+      if (previous !== 'realtime' && !ctx.fromResume) void this.refreshAssets().catch(() => {});
       return;
     }
     this.pool.closeAll();
     this.clearUncoveredTimer();
+    this.clearRecoveryTimer();
   }
 
   protected freshnessWindowMs(): number {
@@ -305,20 +353,30 @@ export class PriceService {
 
   // ============ instrument 解析 ============
 
+  /** 当前实际在用的那一层；effective tier 每轮由真实拿到的 fresh quote 决定 */
   private preferredInstruments(assetKey: AssetKey): VenueInstrument[] {
     const all = this.resolved.get(assetKey) ?? [];
-    const floor = this.tierFloor.get(assetKey) ?? 1;
+    const effective = this.effectiveTier.get(assetKey);
+    if (effective) {
+      const inTier = all.filter((instrument) => instrumentTier(instrument) === effective);
+      if (inTier.length > 0) return inTier;
+    }
     for (const tier of [1, 2, 3] as const) {
-      if (tier < floor) continue;
       const inTier = all.filter((instrument) => instrumentTier(instrument) === tier);
       if (inTier.length > 0) return inTier;
     }
     return [];
   }
 
+  private instrumentsInTier(assetKey: AssetKey, tier: SourceTier): VenueInstrument[] {
+    return (this.resolved.get(assetKey) ?? []).filter((i) => instrumentTier(i) === tier);
+  }
+
   private ensureResolved(assetKey: AssetKey): Promise<VenueInstrument[]> {
+    // 否定结果同样要缓存，否则不可用资产每轮都会重跑一整套必然失败的 candidate 探测。
+    // catalog 刷新时会由 onUpdate 主动失效，所以缓存空结果是安全的
     const existing = this.resolved.get(assetKey);
-    if (existing && existing.length > 0) return Promise.resolve(existing);
+    if (existing) return Promise.resolve(existing);
     const pending = this.resolving.get(assetKey);
     if (pending) return pending;
 
@@ -345,10 +403,14 @@ export class PriceService {
       const candidates = candidateInstruments(assetKey, tier);
       if (candidates.length === 0) continue;
       const quotes = await fetchTargetedQuotes(candidates);
-      if (quotes.length === 0) continue;
-      const liveIds = new Set(quotes.map((quote) => `${quote.venue}|${quote.instrumentId}`));
+      // 已退市的 symbol 照样会返回 200 + 旧的 lastPrice，所以「有正数价格」不足以确认 instrument 有效
+      const now = Date.now();
+      const usable = quotes.filter((quote) => isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS));
+      if (usable.length === 0) continue;
+      const liveIds = new Set(usable.map((quote) => `${quote.venue}|${quote.instrumentId}`));
       verified.push(...candidates.filter((c) => liveIds.has(`${c.venue}|${c.instrumentId}`)));
-      for (const quote of quotes) this.quotes.ingest(quote);
+      for (const quote of usable) this.quotes.ingest(quote);
+      this.setEffectiveTier(assetKey, tier);
       break;
     }
 
@@ -365,42 +427,128 @@ export class PriceService {
   // ============ 报价获取 ============
 
   private async doRefresh(assetKeys: AssetKey[]): Promise<void> {
-    await Promise.all(assetKeys.map((key) => this.ensureResolved(key)));
+    // candidate 验证本身就会取一次报价，本次刷新不能对同一层再打一遍
+    const justVerified = new Set<AssetKey>();
+    await Promise.all(
+      assetKeys.map(async (key) => {
+        const alreadyResolved = this.resolved.has(key);
+        await this.ensureResolved(key);
+        if (!alreadyResolved && this.effectiveTier.has(key)) justVerified.add(key);
+      }),
+    );
+    await Promise.all(assetKeys.map((key) => this.refreshTiers(key, justVerified.has(key))));
 
-    const instruments = assetKeys.flatMap((key) => this.preferredInstruments(key));
-    if (instruments.length > 0) {
-      const quotes = await fetchTargetedQuotes(instruments);
-      for (const quote of quotes) this.quotes.ingest(quote);
-    }
-
-    for (const key of assetKeys) this.promoteTierIfEmpty(key);
     for (const key of assetKeys) this.recompute(key);
+    this.syncDesiredInstruments();
     this.notifyNow();
     void this.persist();
   }
 
-  /** 首选层完全拿不到报价时，下沉到下一个有 instrument 的层 */
-  private promoteTierIfEmpty(assetKey: AssetKey): void {
-    const preferred = this.preferredInstruments(assetKey);
-    if (preferred.length === 0) return;
-    const ids = new Set(preferred.map((i) => `${i.venue}|${i.instrumentId}`));
-    const hasQuote = this.quotes
-      .quotesFor(assetKey)
-      .some((quote) => ids.has(`${quote.venue}|${quote.instrumentId}`));
-    if (hasQuote) return;
+  /**
+   * 从 Tier 1 开始逐层定向请求，第一个拿到本轮可用报价的层就是这个资产当前的 effective tier。
+   * 因为每轮都从 Tier 1 重新试，Tier 1 恢复后不需要用户重新添加标的就会自动升回去。
+   */
+  private async refreshTiers(assetKey: AssetKey, justVerified: boolean): Promise<void> {
+    if ((this.resolved.get(assetKey) ?? []).length === 0) return;
 
-    const currentTier = instrumentTier(preferred[0]);
-    const all = this.resolved.get(assetKey) ?? [];
     for (const tier of [1, 2, 3] as const) {
-      if (tier <= currentTier) continue;
-      if (all.some((instrument) => instrumentTier(instrument) === tier)) {
-        this.tierFloor.set(assetKey, tier);
-        this.desiredInstruments = [...this.currentUnion].flatMap((key) =>
-          this.preferredInstruments(key),
-        );
-        this.applyTransport();
+      const instruments = this.instrumentsInTier(assetKey, tier);
+      if (instruments.length === 0) continue;
+
+      if (
+        justVerified &&
+        this.effectiveTier.get(assetKey) === tier &&
+        this.hasUsableQuote(assetKey, tier)
+      ) {
         return;
       }
+
+      const quotes = await fetchTargetedQuotes(instruments);
+      const now = Date.now();
+      const usable = quotes.filter((quote) => isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS));
+      for (const quote of usable) this.quotes.ingest(quote);
+      if (usable.length > 0) {
+        this.setEffectiveTier(assetKey, tier);
+        return;
+      }
+    }
+  }
+
+  /** 换层时必须清掉别的层的残留报价，否则上一层的旧价会一直压住新层 */
+  private setEffectiveTier(assetKey: AssetKey, tier: SourceTier): void {
+    this.effectiveTier.set(assetKey, tier);
+    this.quotes.dropWhere(assetKey, (quote) => productTier(quote.productKind) !== tier);
+  }
+
+  private hasUsableQuote(assetKey: AssetKey, tier: SourceTier): boolean {
+    const now = Date.now();
+    return this.quotes
+      .quotesFor(assetKey)
+      .some(
+        (quote) =>
+          productTier(quote.productKind) === tier && isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS),
+      );
+  }
+
+  private syncDesiredInstruments(): void {
+    const next = [...this.currentUnion].flatMap((key) => this.preferredInstruments(key));
+    const fingerprint = next
+      .map((i) => `${i.venue}|${i.instrumentId}`)
+      .sort()
+      .join(',');
+    if (fingerprint === this.desiredFingerprint) return;
+    this.desiredFingerprint = fingerprint;
+    this.desiredInstruments = next;
+    this.applyTransport();
+  }
+
+  /**
+   * effective tier 掉到 Tier 1 以下时的低频恢复探测。REALTIME 下没有周期性 REST，
+   * 没有这个 timer 的话 Tier 1 恢复要等到用户下次操作才会被发现。
+   */
+  private recoveryTargets(): AssetKey[] {
+    const out: AssetKey[] = [];
+    for (const key of this.currentUnion) {
+      const tier = this.effectiveTier.get(key);
+      if (tier && tier > 1 && this.instrumentsInTier(key, 1).length > 0) out.push(key);
+    }
+    return out;
+  }
+
+  protected startRecoveryTimer(): void {
+    if (this.recoveryTimer) return;
+    if (this.recoveryTargets().length === 0) return;
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null;
+      const targets = this.recoveryTargets();
+      if (targets.length === 0) return;
+      void this.probeTierOne(targets).finally(() => this.startRecoveryTimer());
+    }, TIER_RECOVERY_PROBE_MS);
+  }
+
+  private async probeTierOne(assetKeys: AssetKey[]): Promise<void> {
+    const instruments = assetKeys.flatMap((key) => this.instrumentsInTier(key, 1));
+    if (instruments.length === 0) return;
+    const quotes = await fetchTargetedQuotes(instruments).catch(() => [] as VenueQuote[]);
+    const now = Date.now();
+    const recovered = new Set<AssetKey>();
+    for (const quote of quotes) {
+      if (!isUsableQuote(quote, now, TRADABLE_MAX_AGE_MS)) continue;
+      if (this.quotes.ingest(quote)) recovered.add(quote.assetKey);
+    }
+    if (recovered.size === 0) return;
+    for (const key of recovered) {
+      this.setEffectiveTier(key, 1);
+      this.recompute(key);
+    }
+    this.syncDesiredInstruments();
+    this.notifyNow();
+  }
+
+  protected clearRecoveryTimer(): void {
+    if (this.recoveryTimer) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = null;
     }
   }
 
@@ -446,7 +594,8 @@ export class PriceService {
     const covered = this.pool.coveredInstrumentIds(this.desiredInstruments);
     const out = new Set<AssetKey>();
     for (const instrument of this.desiredInstruments) {
-      if (!covered.has(instrument.instrumentId)) out.add(instrument.assetKey);
+      if (!covered.has(`${instrument.venue}|${instrument.instrumentId}`))
+        out.add(instrument.assetKey);
     }
     return out;
   }
