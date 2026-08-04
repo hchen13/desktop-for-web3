@@ -218,6 +218,23 @@ describe('断线重连', () => {
     pool.closeAll();
   });
 
+  it('退避窗口内再次 setDesired 不会额外开出孤儿连接', () => {
+    vi.useFakeTimers();
+    const pool = new QuoteSocketPool([okxEndpoint], () => {});
+    pool.setDesiredInstruments([instrument('okx', 'BTC-USDT', 'BTC')]);
+    FakeSocket.openAll();
+    FakeSocket.instances[0].drop();
+
+    // 退避还没到期时又来一轮 reconcile
+    pool.setDesiredInstruments([instrument('okx', 'BTC-USDT', 'BTC')]);
+    expect(FakeSocket.instances).toHaveLength(2);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(FakeSocket.instances).toHaveLength(2);
+    pool.closeAll();
+  });
+
   it('主动 close 之后不再有重连 timer', () => {
     vi.useFakeTimers();
     const pool = new QuoteSocketPool([okxEndpoint], () => {});

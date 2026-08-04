@@ -24,6 +24,30 @@ export const AnimatedLayoutContainer = () => {
 
   let isAnimating = false;
 
+  const runTransition = (targetId: string) => {
+    isAnimating = true;
+    setIsTransitioning(true);
+
+    setTimeout(() => {
+      setDisplayLayoutId(targetId);
+
+      setTimeout(() => {
+        isAnimating = false;
+
+        // 动画期间的切换被下面的 isAnimating 早退丢弃，而 isAnimating 不是响应式依赖，
+        // effect 不会因为它复位而重跑 —— 必须在这里补上最后一次切换，
+        // 否则 displayLayoutId 会与 currentLayoutId 永久错位
+        const latestId = gridStore.currentLayoutId;
+        if (latestId !== targetId) {
+          runTransition(latestId);
+          return;
+        }
+
+        setIsTransitioning(false);
+      }, 150);
+    }, 150);
+  };
+
   createEffect(() => {
     const newId = gridStore.currentLayoutId;
 
@@ -33,17 +57,7 @@ export const AnimatedLayoutContainer = () => {
 
     if (isAnimating) return;
 
-    isAnimating = true;
-    setIsTransitioning(true);
-
-    setTimeout(() => {
-      setDisplayLayoutId(newId);
-
-      setTimeout(() => {
-        setIsTransitioning(false);
-        isAnimating = false;
-      }, 150);
-    }, 150);
+    runTransition(newId);
   });
 
   const layouts = createMemo(() => gridStore.layouts);

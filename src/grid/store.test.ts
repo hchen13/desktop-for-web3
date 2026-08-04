@@ -10,6 +10,7 @@ import {
   addElement,
   moveElement,
   removeElement,
+  updateElementState,
   addLayout,
   deleteLayout,
   resetLayout,
@@ -376,5 +377,29 @@ describe('getCurrentLayout / getCurrentElements', () => {
       { id: 'x', type: 'widget', position: { x: 0, y: 0 }, size: { width: 1, height: 1 } },
     ]);
     expect(getCurrentElements()).toHaveLength(1);
+  });
+});
+
+describe('updateElementState', () => {
+  beforeEach(() => {
+    resetStore();
+    setGridStore('layouts', [
+      baseLayout('desktop-1', [
+        { id: 'w1', type: 'widget', position: { x: 0, y: 0 }, size: { width: 1, height: 1 } },
+      ]),
+      baseLayout('desktop-2', [
+        { id: 'w2', type: 'widget', position: { x: 0, y: 0 }, size: { width: 1, height: 1 } },
+      ]),
+    ]);
+  });
+
+  it('默认写入当前 layout', () => {
+    updateElementState('w1', { settings: { chainId: 'eth' } });
+    expect(gridStore.layouts[0].elements[0].state).toEqual({ settings: { chainId: 'eth' } });
+  });
+
+  it('显式传入 layoutId 时写入后台 layout', () => {
+    updateElementState('w2', { settings: { chainId: 'eth' } }, 'desktop-2');
+    expect(gridStore.layouts[1].elements[0].state).toEqual({ settings: { chainId: 'eth' } });
   });
 });

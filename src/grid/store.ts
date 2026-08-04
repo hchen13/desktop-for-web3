@@ -199,8 +199,8 @@ export const switchLayout = (layoutId: string): void => {
   saveToStorage();
 };
 
-export const addElement = (element: GridElement): boolean => {
-  return addElementToLayout(gridStore.currentLayoutId, element);
+export const addElement = (element: GridElement, layoutId = gridStore.currentLayoutId): boolean => {
+  return addElementToLayout(layoutId, element);
 };
 
 /**
@@ -264,25 +264,30 @@ export const moveElement = (elementId: string, newPosition: GridPosition): boole
   return true;
 };
 
-export const removeElement = (elementId: string): void => {
+export const removeElement = (elementId: string, layoutId = gridStore.currentLayoutId): void => {
   setGridStore(
     'layouts',
-    (layout) => layout.id === gridStore.currentLayoutId,
+    (layout) => layout.id === layoutId,
     'elements',
     (elements) => elements.filter((e) => e.id !== elementId),
   );
   saveToStorage();
 };
 
-export const updateIconElement = (elementId: string, name: string, url: string): boolean => {
-  const elements = getCurrentElements();
-  const element = elements.find((e) => e.id === elementId);
+export const updateIconElement = (
+  elementId: string,
+  name: string,
+  url: string,
+  layoutId = gridStore.currentLayoutId,
+): boolean => {
+  const layout = gridStore.layouts.find((l) => l.id === layoutId);
+  const element = layout?.elements.find((e) => e.id === elementId);
 
   if (!element || element.type !== 'icon') return false;
 
   setGridStore(
     'layouts',
-    (layout) => layout.id === gridStore.currentLayoutId,
+    (l) => l.id === layoutId,
     'elements',
     (e: any) => e.id === elementId,
     'data',
@@ -297,10 +302,14 @@ export const updateIconElement = (elementId: string, name: string, url: string):
   return true;
 };
 
-export const updateElementState = (elementId: string, state: Record<string, any>): void => {
+export const updateElementState = (
+  elementId: string,
+  state: Record<string, any>,
+  layoutId = gridStore.currentLayoutId,
+): void => {
   setGridStore(
     'layouts',
-    (layout) => layout.id === gridStore.currentLayoutId,
+    (layout) => layout.id === layoutId,
     'elements',
     (e: any) => e.id === elementId,
     'state',

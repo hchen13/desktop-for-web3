@@ -124,6 +124,11 @@ class EndpointConnection {
 
   private open(): void {
     this.closedByUs = false;
+    // 退避窗口内手动 open 时必须撤销排队中的重连，否则退避到期会再开一条无人引用的孤儿连接
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     const socket = createSocket(this.endpoint.url);
     if (!socket) return;
     this.socket = socket;
@@ -235,7 +240,7 @@ export class QuoteSocketPool {
     for (const endpoint of this.endpoints) {
       for (const instrument of instruments) {
         if (instrument.venue === endpoint.venue && endpoint.supports(instrument)) {
-          out.add(instrument.instrumentId);
+          out.add(`${instrument.venue}|${instrument.instrumentId}`);
         }
       }
     }

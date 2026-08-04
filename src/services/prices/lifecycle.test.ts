@@ -23,19 +23,25 @@ function setFocus(next: boolean): void {
 
 interface Harness {
   lifecycle: TransportLifecycle;
-  modes: Array<{ mode: TransportMode; previous: TransportMode }>;
+  modes: Array<{ mode: TransportMode; previous: TransportMode; fromResume: boolean }>;
   ticks: TransportMode[];
+  resumes: number;
   setHasWork: (value: boolean) => void;
 }
 
 function createHarness(initialWork = true): Harness {
   let hasWork = initialWork;
-  const modes: Array<{ mode: TransportMode; previous: TransportMode }> = [];
+  const modes: Array<{ mode: TransportMode; previous: TransportMode; fromResume: boolean }> = [];
   const ticks: TransportMode[] = [];
+  const state = { resumes: 0 };
   const lifecycle = new TransportLifecycle({
     hasWork: () => hasWork,
-    onModeChange: (mode, previous) => modes.push({ mode, previous }),
+    onModeChange: (mode, previous, ctx) =>
+      modes.push({ mode, previous, fromResume: ctx.fromResume }),
     onPassiveTick: (mode) => ticks.push(mode),
+    onResume: () => {
+      state.resumes += 1;
+    },
   });
   lifecycle.start();
   lifecycle.reconcileDesiredMode();
@@ -43,6 +49,9 @@ function createHarness(initialWork = true): Harness {
     lifecycle,
     modes,
     ticks,
+    get resumes() {
+      return state.resumes;
+    },
     setHasWork: (value) => {
       hasWork = value;
       lifecycle.reconcileDesiredMode();
@@ -162,7 +171,9 @@ describe('PASSIVE_VISIBLE', () => {
     setFocus(true);
 
     expect(h.lifecycle.getMode()).toBe('realtime');
-    expect(h.modes.slice(before)).toEqual([{ mode: 'realtime', previous: 'passive-visible' }]);
+    expect(h.modes.slice(before)).toEqual([
+      { mode: 'realtime', previous: 'passive-visible', fromResume: false },
+    ]);
     h.lifecycle.stop();
   });
 });
@@ -229,7 +240,7 @@ describe('hidden 宽限与 PASSIVE_HIDDEN', () => {
     // 直接从 passive-visible 掉到 passive-hidden，中间不会回到 realtime
     expect(h.lifecycle.getMode()).toBe('passive-hidden');
     expect(h.modes.slice(before)).toEqual([
-      { mode: 'passive-hidden', previous: 'passive-visible' },
+      { mode: 'passive-hidden', previous: 'passive-visible', fromResume: false },
     ]);
     vi.advanceTimersByTime(HIDDEN_GRACE_MS * 2);
     expect(h.modes.slice(before).map((m) => m.mode)).not.toContain('realtime');
@@ -262,9 +273,10 @@ describe('pagehide / freeze / pageshow / resume', () => {
     h.lifecycle.stop();
   });
 
+  // freeze / resume 在 document 上派发且不冒泡，这里必须按真实派发目标断言
   it('freeze 同样进入 OFF', () => {
     const h = createHarness();
-    window.dispatchEvent(new Event('freeze'));
+    document.dispatchEvent(new Event('freeze'));
     expect(h.lifecycle.getMode()).toBe('off');
     h.lifecycle.stop();
   });
@@ -277,7 +289,9 @@ describe('pagehide / freeze / pageshow / resume', () => {
     window.dispatchEvent(new Event('pageshow'));
 
     expect(h.lifecycle.getMode()).toBe('realtime');
-    expect(h.modes.slice(before)).toEqual([{ mode: 'realtime', previous: 'off' }]);
+    expect(h.modes.slice(before)).toEqual([
+      { mode: 'realtime', previous: 'off', fromResume: true },
+    ]);
     h.lifecycle.stop();
   });
 
@@ -285,9 +299,9 @@ describe('pagehide / freeze / pageshow / resume', () => {
     const h = createHarness();
     setFocus(false);
     vi.advanceTimersByTime(60_000);
-    window.dispatchEvent(new Event('freeze'));
+    document.dispatchEvent(new Event('freeze'));
 
-    window.dispatchEvent(new Event('resume'));
+    document.dispatchEvent(new Event('resume'));
 
     expect(h.lifecycle.getMode()).toBe('passive-visible');
     h.lifecycle.stop();

@@ -21,11 +21,18 @@ export const HIDDEN_GRACE_MS = 30_000;
 export const PASSIVE_VISIBLE_INTERVAL_MS = 60_000;
 export const PASSIVE_HIDDEN_INTERVAL_MS = 5 * 60_000;
 
+export interface ModeChangeContext {
+  /** 这次模式变化是 pageshow / resume 引起的 */
+  fromResume: boolean;
+}
+
 export interface TransportLifecycleOptions {
   /** 是否存在 active Watchlist 且有 selected AssetKeys */
   hasWork: () => boolean;
-  onModeChange: (mode: TransportMode, previous: TransportMode) => void;
+  onModeChange: (mode: TransportMode, previous: TransportMode, ctx: ModeChangeContext) => void;
   onPassiveTick: (mode: TransportMode) => void;
+  /** 恢复后无论落到哪个模式都要立即刷新一次，不能等 60 秒或 5 分钟 */
+  onResume: () => void;
 }
 
 function isVisible(): boolean {
@@ -46,6 +53,7 @@ export class TransportLifecycle {
   private modeBeforeHidden: TransportMode = 'off';
   private suspended = false;
   private started = false;
+  private resuming = false;
 
   private deadlineTimer: ReturnType<typeof setTimeout> | null = null;
   private passiveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -84,9 +92,10 @@ export class TransportLifecycle {
       this.reconcileDesiredMode();
     });
     on(window, 'pagehide', () => this.suspend());
-    on(window, 'freeze', () => this.suspend());
     on(window, 'pageshow', () => this.resume());
-    on(window, 'resume', () => this.resume());
+    // freeze / resume 由 Page Lifecycle API 派发在 document 上且不冒泡，挂在 window 上收不到
+    on(document, 'freeze', () => this.suspend());
+    on(document, 'resume', () => this.resume());
   }
 
   stop(): void {
@@ -116,7 +125,7 @@ export class TransportLifecycle {
       const previous = this.mode;
       this.mode = next;
       this.restartPassiveTimer();
-      this.options.onModeChange(next, previous);
+      this.options.onModeChange(next, previous, { fromResume: this.resuming });
     }
     this.scheduleDeadline();
   }
@@ -206,7 +215,14 @@ export class TransportLifecycle {
     // 重新读取当前 visibility / focus，不沿用挂起前的宽限期
     this.blurredSince = null;
     this.hiddenSince = null;
-    this.reconcileDesiredMode();
+    this.resuming = true;
+    try {
+      this.reconcileDesiredMode();
+      // 恢复只在这里刷新一次；onModeChange 看到 fromResume 就不会再刷一轮
+      if (this.mode !== 'off') this.options.onResume();
+    } finally {
+      this.resuming = false;
+    }
   }
 
   private clearTimers(): void {

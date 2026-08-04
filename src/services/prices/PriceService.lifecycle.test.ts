@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PriceService } from './PriceService';
+import { PriceService, WS_UNCOVERED_REFRESH_MS } from './PriceService';
 import { exchangeCatalog, EXCHANGE_CATALOG_STORAGE_KEY } from './exchangeCatalog';
 import {
   BLUR_GRACE_MS,
@@ -69,9 +69,35 @@ function spot(
   });
 }
 
+function equityPerp(
+  venue: VenueInstrument['venue'],
+  instrumentId: string,
+  symbol: string,
+): VenueInstrument {
+  return makeInstrument({
+    venue,
+    instrumentId,
+    symbol,
+    base: symbol,
+    quote: 'USDT',
+    category: 'stock',
+    productKind: 'equity_perp',
+    preferredPriceKind: 'index',
+  });
+}
+
+function freshVenueTimestamps() {
+  const now = Date.now();
+  return { okx: now, bitget: now, binance: now, hyperliquid: now };
+}
+
 async function seedCatalog(instruments: VenueInstrument[]): Promise<void> {
   await chrome.storage.local.set({
-    [EXCHANGE_CATALOG_STORAGE_KEY]: { version: 'v1', timestamp: Date.now(), instruments },
+    [EXCHANGE_CATALOG_STORAGE_KEY]: {
+      version: 'v2',
+      venueTimestamps: freshVenueTimestamps(),
+      instruments,
+    },
   });
 }
 
@@ -277,6 +303,109 @@ describe('pagehide / pageshow', () => {
     expect(service.__transportModeForTest()).toBe('realtime');
     expect(FakeSocket.openCount()).toBe(1);
     expect(quoteRequests.length - before).toBe(1);
+  });
+});
+
+describe('WS 未覆盖兜底', () => {
+  it('Binance TradFi 永续与 Bitget 同名永续共存时仍按 60 秒兜底刷新', async () => {
+    exchangeCatalog.__resetForTest();
+    await seedCatalog([
+      equityPerp('bitget', 'AAPLUSDT', 'AAPL'),
+      equityPerp('binance', 'AAPLUSDT', 'AAPL'),
+    ]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      quoteRequests.push(url);
+      if (url.includes('fapi.binance.com/fapi/v1/premiumIndex')) {
+        return new Response(
+          JSON.stringify({ symbol: 'AAPLUSDT', indexPrice: '190', markPrice: '190' }),
+        );
+      }
+      if (url.includes('fapi.binance.com/fapi/v1/ticker/24hr')) {
+        return new Response(JSON.stringify({ priceChangePercent: '1', quoteVolume: '10' }));
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    service.subscribe(new Set<AssetKey>(['stock:AAPL']), () => {});
+    await service.__settleForTest();
+    const premiumIndexCount = () => quoteRequests.filter((u) => u.includes('premiumIndex')).length;
+    const before = premiumIndexCount();
+    expect(before).toBeGreaterThan(0);
+
+    vi.advanceTimersByTime(WS_UNCOVERED_REFRESH_MS);
+    await service.__settleForTest();
+
+    expect(premiumIndexCount()).toBeGreaterThan(before);
+  });
+});
+
+describe('resume 契约', () => {
+  it('resume 后进入 PASSIVE_VISIBLE 也要立即刷新一次，不用等 60 秒', async () => {
+    focused = false;
+    await subscribeBtc();
+    vi.advanceTimersByTime(BLUR_GRACE_MS);
+    expect(service.__transportModeForTest()).toBe('passive-visible');
+
+    window.dispatchEvent(new Event('pagehide'));
+    const before = quoteRequests.length;
+
+    window.dispatchEvent(new Event('pageshow'));
+    await service.__settleForTest();
+
+    expect(service.__transportModeForTest()).toBe('passive-visible');
+    expect(quoteRequests.length - before).toBe(1);
+  });
+
+  it('resume 后进入 PASSIVE_HIDDEN 也要立即刷新一次，不用等 5 分钟', async () => {
+    await subscribeBtc();
+    setVisibility('hidden');
+    vi.advanceTimersByTime(HIDDEN_GRACE_MS);
+    expect(service.__transportModeForTest()).toBe('passive-hidden');
+
+    window.dispatchEvent(new Event('pagehide'));
+    const before = quoteRequests.length;
+
+    window.dispatchEvent(new Event('pageshow'));
+    await service.__settleForTest();
+
+    expect(service.__transportModeForTest()).toBe('passive-hidden');
+    expect(quoteRequests.length - before).toBe(1);
+  });
+
+  it('resume 回到 REALTIME 时只刷一轮，不会因为两个回调各刷一次', async () => {
+    await subscribeBtc();
+    window.dispatchEvent(new Event('pagehide'));
+    const before = quoteRequests.length;
+
+    window.dispatchEvent(new Event('pageshow'));
+    await service.__settleForTest();
+
+    expect(service.__transportModeForTest()).toBe('realtime');
+    expect(quoteRequests.length - before).toBe(1);
+  });
+
+  it('没有选中标的时，生命周期事件不产生任何价格请求', async () => {
+    const sub = service.subscribe(new Set<AssetKey>(['crypto:BTC']), () => {});
+    await service.__settleForTest();
+    sub.setActive(false);
+    await service.__settleForTest();
+    const before = quoteRequests.length;
+
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pageshow'));
+    setVisibility('hidden');
+    vi.advanceTimersByTime(HIDDEN_GRACE_MS * 2);
+    setVisibility('visible');
+    setFocus(false);
+    vi.advanceTimersByTime(BLUR_GRACE_MS * 2);
+    setFocus(true);
+    await service.__settleForTest();
+
+    expect(service.__transportModeForTest()).toBe('off');
+    expect(FakeSocket.openCount()).toBe(0);
+    expect(quoteRequests).toHaveLength(before);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

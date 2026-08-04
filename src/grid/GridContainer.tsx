@@ -293,7 +293,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
       menuItems.push({
         label: '删除',
         variant: 'danger' as const,
-        action: () => removeElement(element.id),
+        action: () => removeElement(element.id, currentLayoutId()),
       });
 
       showContextMenu(e.clientX, e.clientY, menuItems);
@@ -428,7 +428,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
       },
     };
 
-    addElement(newIcon);
+    addElement(newIcon, currentLayoutId());
     setIsAddIconDialogOpen(false);
     setRightClickPosition(null);
   };
@@ -440,7 +440,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
     const iconId = editingIconId();
     if (!iconId) return;
 
-    updateIconElement(iconId, name, url);
+    updateIconElement(iconId, name, url, currentLayoutId());
     setIsEditIconDialogOpen(false);
     setEditingIconId(null);
   };
@@ -574,7 +574,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
       state: createInitialWidgetState(widgetType),
     };
 
-    addElement(newWidget);
+    addElement(newWidget, currentLayoutId());
     setIsAddWidgetDialogOpen(false);
     setRightClickPosition(null);
   };
@@ -705,7 +705,7 @@ export const GridContainer = (props: GridContainerProps = {}) => {
     onComplete?.();
 
     // 更新 store - 将绝对坐标转换为锚点相对坐标保存
-    const currentId = gridStore.currentLayoutId;
+    const currentId = currentLayoutId();
     const anchor = anchorColumn();
     finalLayout.forEach((absolutePos, elementId) => {
       const anchorRelativePos = absoluteToAnchor(absolutePos, anchor);
@@ -812,7 +812,9 @@ export const GridContainer = (props: GridContainerProps = {}) => {
                         elementId={element.id}
                         state={element.state}
                         isActiveLayout={props.isActiveLayout !== false}
-                        onStateChange={(newState) => updateElementState(element.id, newState)}
+                        onStateChange={(newState) =>
+                          updateElementState(element.id, newState, currentLayoutId())
+                        }
                       />
                     </div>
                   </div>
