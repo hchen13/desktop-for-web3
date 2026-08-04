@@ -197,6 +197,119 @@ describe('陈旧 / 不可交易 instrument 必须被拒绝', () => {
   });
 });
 
+describe('真实冷启动（无 catalog）的 Tier fallback 与恢复', () => {
+  /** 只按 URL 决定成败，模拟 OKX 代币化现货与 Bitget 股票永续两层 */
+  function mockColdStart(state: { tier1Up: boolean }) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      const ts = String(Date.now());
+      if (url.includes('okx.com') && url.includes('XAAPL-USDT')) {
+        if (!state.tier1Up) return new Response('down', { status: 503 });
+        return new Response(
+          JSON.stringify({
+            code: '0',
+            data: [
+              {
+                instId: 'XAAPL-USDT',
+                last: '300',
+                open24h: '299',
+                ts,
+                bidPx: '299.9',
+                askPx: '300.1',
+              },
+            ],
+          }),
+        );
+      }
+      if (url.includes('bitget.com') && url.includes('symbol=AAPLUSDT')) {
+        const isFutures = url.includes('USDT-FUTURES');
+        if (!isFutures) return new Response(JSON.stringify({ code: '00000', data: [] }));
+        return new Response(
+          JSON.stringify({
+            code: '00000',
+            data: [
+              {
+                symbol: 'AAPLUSDT',
+                lastPrice: '305',
+                indexPrice: '305',
+                price24hPcnt: '0',
+                ts,
+                bid1Price: '304.9',
+                ask1Price: '305.1',
+              },
+            ],
+          }),
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+  }
+
+  it('冷启动 Tier 1 成功 → Tier 1 失效自动发现并验证 Tier 2 → Tier 1 恢复自动升回', async () => {
+    vi.useFakeTimers();
+    const state = { tier1Up: true };
+    mockColdStart(state);
+
+    service.subscribe(new Set<AssetKey>(['stock:AAPL']), () => {});
+    await service.__settleForTest();
+
+    // ① 冷启动只验证到 Tier 1，resolved 里此时并没有 Tier 2
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(300);
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual([
+      'XAAPL-USDT',
+    ]);
+
+    // ② Tier 1 失效：当轮就要自己发现并验证 Tier 2 candidate
+    state.tier1Up = false;
+    await service.refreshAssets(new Set<AssetKey>(['stock:AAPL']));
+
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(305);
+    expect(service.getSnapshot('stock:AAPL')!.coverageTier).toBe('derivative-reference');
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual(['AAPLUSDT']);
+
+    // ③ Tier 1 恢复：不需要删掉标的再加回来
+    state.tier1Up = true;
+    await vi.advanceTimersByTimeAsync(TIER_RECOVERY_PROBE_MS + 10);
+    await service.__settleForTest();
+
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(300);
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual([
+      'XAAPL-USDT',
+    ]);
+    vi.useRealTimers();
+  });
+
+  it('冷启动首轮 Tier 1 就失败、Tier 2 成功时，恢复探测仍能发现 Tier 1', async () => {
+    vi.useFakeTimers();
+    const state = { tier1Up: false };
+    mockColdStart(state);
+
+    service.subscribe(new Set<AssetKey>(['stock:AAPL']), () => {});
+    await service.__settleForTest();
+
+    // resolved 里从来没有出现过 Tier 1，recovery 必须靠可生成的 candidate
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(305);
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual(['AAPLUSDT']);
+
+    state.tier1Up = true;
+    await vi.advanceTimersByTimeAsync(TIER_RECOVERY_PROBE_MS + 10);
+    await service.__settleForTest();
+
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(300);
+    expect(service.getSnapshot('stock:AAPL')!.coverageTier).toBe('single-source');
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual([
+      'XAAPL-USDT',
+    ]);
+    vi.useRealTimers();
+  });
+
+  it('Hyperliquid Tier 3 不会在冷启动里被盲猜', async () => {
+    const { candidateInstruments: candidates } = await import('./instrumentResolver');
+    expect(candidates('stock:AAPL', 3)).toEqual([]);
+    expect(candidates('stock:BRK.B', 3)).toEqual([]);
+  });
+});
+
 describe('Tier 1 → Tier 2 → Tier 1 恢复的完整序列', () => {
   it('Tier 1 失效当轮下沉 Tier 2，恢复探测让它自动升回 Tier 1', async () => {
     vi.useFakeTimers();
