@@ -206,11 +206,15 @@ export class TransportLifecycle {
   }
 
   private suspend(): void {
+    if (this.suspended) return;
     this.suspended = true;
     this.reconcileDesiredMode();
   }
 
   private resume(): void {
+    // 一次真实恢复可能先后收到 resume 和 pageshow；页面首次加载的 pageshow
+    // 之前根本没有 suspend 过，必须是 no-op
+    if (!this.suspended) return;
     this.suspended = false;
     // 重新读取当前 visibility / focus，不沿用挂起前的宽限期
     this.blurredSince = null;

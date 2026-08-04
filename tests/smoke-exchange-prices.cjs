@@ -14,6 +14,21 @@ const DIST = path.resolve(__dirname, '..', 'dist');
 const SRC = path.resolve(__dirname, '..', 'src');
 const PROFILE = path.resolve(__dirname, 'playwright-profile-smoke');
 
+/**
+ * 复用固定的测试 profile。仓库 AGENTS.md 禁止未经确认的递归删除，所以这里绝不
+ * 自动 rm -rf；fresh storage 由扩展页面里的 chrome.storage.local.clear() 建立。
+ */
+function ensureProfileUsable() {
+  if (!fs.existsSync(PROFILE)) return;
+  const lock = path.join(PROFILE, 'SingletonLock');
+  if (fs.existsSync(lock)) {
+    throw new Error(
+      `测试 profile 疑似被占用或上次异常退出：${PROFILE}\n` +
+        '请先确认没有残留的 Chrome 进程，然后手动删除该目录后重试（脚本不会自动递归删除）。',
+    );
+  }
+}
+
 const failures = [];
 let checks = 0;
 
@@ -29,14 +44,59 @@ function check(name, condition, detail) {
 
 const QUOTE_HOSTS = /^https:\/\/(www\.okx\.com|api\.bitget\.com|data-api\.binance\.vision|fapi\.binance\.com|api\.hyperliquid\.xyz)\//;
 
-const FULL_MARKET_PATTERNS = [
+/** 交易所侧的无 symbol ticker */
+const FULL_MARKET_URL_PATTERNS = [
   /\/api\/v5\/market\/tickers\?instType=/,
   /\/api\/v3\/market\/tickers\?category=[^&]*$/,
   /\/api\/v3\/ticker\/24hr$/,
   /\/fapi\/v1\/ticker\/24hr$/,
+  /\/api\/v3\/ticker\/price$/,
 ];
 
+/** Hyperliquid 的全市场价格查询复用同一个 /info URL，只能看 POST body */
+const FULL_MARKET_BODY_PATTERNS = [
+  /"type"\s*:\s*"allMids"/,
+  /"type"\s*:\s*"metaAndAssetCtxs"/,
+  /"type"\s*:\s*"spotMetaAndAssetCtxs"/,
+];
+
+function isFullMarket(record) {
+  if (FULL_MARKET_URL_PATTERNS.some((re) => re.test(record.url))) return true;
+  return FULL_MARKET_BODY_PATTERNS.some((re) => re.test(record.body || ''));
+}
+
+function describeRecord(record) {
+  return `${record.method} ${record.url}${record.body ? ` body=${record.body.slice(0, 120)}` : ''}`;
+}
+
 const CATALOG_PATTERNS = [/public\/instruments/, /market\/instruments/, /exchangeInfo/];
+
+function isTicker(record) {
+  return (
+    record.url.includes('/market/ticker') ||
+    record.url.includes('/market/tickers') ||
+    record.url.includes('/ticker/24hr') ||
+    /"type"\s*:\s*"l2Book"/.test(record.body || '')
+  );
+}
+
+function tickerCount(records) {
+  return records.filter(isTicker).length;
+}
+
+/** 打印每个定向请求的 method / URL / body 与调用次数，便于核对预算 */
+function reportTickerBudget(records) {
+  const counts = new Map();
+  for (const record of records.filter(isTicker)) {
+    const key = describeRecord(record);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  console.log(`  --- 定向 REST 明细（共 ${tickerCount(records)} 次）---`);
+  for (const [key, n] of [...counts.entries()].sort()) {
+    console.log(`      ${n}x ${key}`);
+  }
+  return counts;
+}
 
 async function getJson(url, init) {
   const resp = await fetch(url, init);
@@ -140,7 +200,7 @@ async function restSmoke() {
 // ============ 3. MV3 扩展行为断言 ============
 async function extensionSmoke() {
   console.log('\n[3] MV3 扩展行为');
-  if (fs.existsSync(PROFILE)) fs.rmSync(PROFILE, { recursive: true, force: true });
+  ensureProfileUsable();
 
   const ctx = await chromium.launchPersistentContext(PROFILE, {
     headless: false,
@@ -166,14 +226,29 @@ async function extensionSmoke() {
     const requests = [];
     const sockets = [];
     page.on('request', (r) => {
-      if (QUOTE_HOSTS.test(r.url())) requests.push(r.url());
+      if (!QUOTE_HOSTS.test(r.url())) return;
+      requests.push({ url: r.url(), method: r.method(), body: r.postData() ?? '' });
     });
     page.on('websocket', (ws) => sockets.push(ws.url()));
 
-    // --- 3.1 默认自选 ---
+    // --- 3.1 fresh storage 下的默认自选 ---
+    // 不删 profile 目录；只清扩展自己的 storage 来建立干净起点
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('[data-element-id="widget-watchlist"]');
-    await page.waitForTimeout(14000);
+    await page.evaluate(
+      () => new Promise((resolve) => window.chrome.storage.local.clear(resolve)),
+    );
+
+    // 先彻底卸掉上一次加载，否则它被打断后的兜底请求会漏进下面的计数窗口
+    await page.goto('about:blank');
+    await page.waitForTimeout(1000);
+    requests.length = 0;
+    sockets.length = 0;
+
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-element-id="widget-watchlist"]');
+    await page.waitForTimeout(15000);
+    reportTickerBudget(requests);
 
     const readSnapshots = () =>
       page.evaluate(async () => {
@@ -194,13 +269,18 @@ async function extensionSmoke() {
       );
     }
     check(
-      '默认自选不触发全市场 ticker',
-      !requests.some((u) => FULL_MARKET_PATTERNS.some((re) => re.test(u))),
-      requests.filter((u) => FULL_MARKET_PATTERNS.some((re) => re.test(u)))[0],
+      '默认自选不触发全市场价格请求（含 Hyperliquid allMids / metaAndAssetCtxs）',
+      !requests.some(isFullMarket),
+      requests.filter(isFullMarket).map(describeRecord)[0],
     );
     check(
       '打开搜索窗口之前没有 catalog 请求',
-      !requests.some((u) => CATALOG_PATTERNS.some((re) => re.test(u))),
+      !requests.some((r) => CATALOG_PATTERNS.some((re) => re.test(r.url))),
+    );
+    check(
+      `默认 6 个 Tier 1 标的的定向 REST 不超过一轮（实际 ${tickerCount(requests)} 次）`,
+      tickerCount(requests) <= 18,
+      requests.filter(isTicker).map(describeRecord).join('\n'),
     );
     check('每个 venue 至多一条 WebSocket', new Set(sockets).size === sockets.length, sockets.join(','));
     check(
@@ -219,17 +299,18 @@ async function extensionSmoke() {
     const dialogRequests = requests.slice(beforeDialog);
     check(
       '打开搜索窗口时请求 instrument metadata',
-      dialogRequests.some((u) => CATALOG_PATTERNS.some((re) => re.test(u))),
+      dialogRequests.some((r) => CATALOG_PATTERNS.some((re) => re.test(r.url))),
     );
     check(
       'catalog 阶段覆盖四家 venue',
       ['okx.com', 'bitget.com', 'binance', 'hyperliquid.xyz'].every((h) =>
-        dialogRequests.some((u) => u.includes(h)),
+        dialogRequests.some((r) => r.url.includes(h)),
       ),
     );
     check(
-      '打开搜索窗口不请求全市场 ticker',
-      !dialogRequests.some((u) => FULL_MARKET_PATTERNS.some((re) => re.test(u))),
+      '打开搜索窗口不请求全市场价格',
+      !dialogRequests.some(isFullMarket),
+      dialogRequests.filter(isFullMarket).map(describeRecord)[0],
     );
 
     const beforeTyping = requests.length;
@@ -307,8 +388,19 @@ async function extensionSmoke() {
     check('UI 上 BRK.B 标注衍生品参考价', !!brkbRow && brkbRow.title.includes('衍生品参考价'));
 
     check(
-      '全程没有出现周期性全市场 ticker',
-      !requests.some((u) => FULL_MARKET_PATTERNS.some((re) => re.test(u))),
+      '全程没有出现全市场价格请求',
+      !requests.some(isFullMarket),
+      requests.filter(isFullMarket).map(describeRecord)[0],
+    );
+    check(
+      'Hyperliquid 只用 perpDexs / meta / l2Book',
+      requests
+        .filter((r) => r.url.includes('hyperliquid.xyz'))
+        .every((r) => /"type"\s*:\s*"(perpDexs|meta|l2Book)"/.test(r.body || '')),
+      requests
+        .filter((r) => r.url.includes('hyperliquid.xyz'))
+        .map(describeRecord)
+        .join('\n'),
     );
   } finally {
     await ctx.close();

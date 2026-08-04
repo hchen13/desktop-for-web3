@@ -14,7 +14,7 @@
  * 否则后台 layout 的 Watchlist 会继续贡献行情订阅。
  */
 
-import { createSignal, createEffect, createMemo, For } from 'solid-js';
+import { createSignal, createEffect, createMemo, onCleanup, For } from 'solid-js';
 import { gridStore } from './store';
 import { GridContainer } from './GridContainer';
 
@@ -24,40 +24,47 @@ export const AnimatedLayoutContainer = () => {
 
   let isAnimating = false;
 
-  const runTransition = (targetId: string) => {
+  let fadeOutTimer: ReturnType<typeof setTimeout> | null = null;
+  let fadeInTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const runTransition = () => {
     isAnimating = true;
     setIsTransitioning(true);
 
-    setTimeout(() => {
-      setDisplayLayoutId(targetId);
+    fadeOutTimer = setTimeout(() => {
+      fadeOutTimer = null;
+      // 切换点必须读最新目标：动画期间又切了一次的话，中间那个 layout 已经过期，
+      // 让它 active 会使它的 Watchlist 短暂上线并发请求
+      const target = gridStore.currentLayoutId;
+      setDisplayLayoutId(target);
 
-      setTimeout(() => {
+      fadeInTimer = setTimeout(() => {
+        fadeInTimer = null;
         isAnimating = false;
 
-        // 动画期间的切换被下面的 isAnimating 早退丢弃，而 isAnimating 不是响应式依赖，
-        // effect 不会因为它复位而重跑 —— 必须在这里补上最后一次切换，
-        // 否则 displayLayoutId 会与 currentLayoutId 永久错位
-        const latestId = gridStore.currentLayoutId;
-        if (latestId !== targetId) {
-          runTransition(latestId);
+        // isAnimating 不是响应式依赖，effect 不会因为它复位而重跑，
+        // 期间累积的切换必须在这里补上
+        if (gridStore.currentLayoutId !== target) {
+          runTransition();
           return;
         }
-
         setIsTransitioning(false);
       }, 150);
     }, 150);
   };
 
+  onCleanup(() => {
+    if (fadeOutTimer) clearTimeout(fadeOutTimer);
+    if (fadeInTimer) clearTimeout(fadeInTimer);
+    fadeOutTimer = null;
+    fadeInTimer = null;
+  });
+
   createEffect(() => {
     const newId = gridStore.currentLayoutId;
-
-    if (newId === displayLayoutId()) {
-      return;
-    }
-
+    if (newId === displayLayoutId()) return;
     if (isAnimating) return;
-
-    runTransition(newId);
+    runTransition();
   });
 
   const layouts = createMemo(() => gridStore.layouts);

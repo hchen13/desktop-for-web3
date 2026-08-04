@@ -47,6 +47,27 @@ describe('AnimatedLayoutContainer 布局切换', () => {
     expect(activeLayoutIndex(container)).toBe(1);
   });
 
+  it('A→B→C 快速切换时 B 从未 active 过', () => {
+    const { container } = render(() => <AnimatedLayoutContainer />);
+
+    // 逐帧记录整个时间序列，而不是只看 1 秒后的终态
+    const timeline: number[] = [activeLayoutIndex(container)];
+    const step = () => {
+      vi.advanceTimersByTime(10);
+      timeline.push(activeLayoutIndex(container));
+    };
+
+    switchLayout('desktop-b');
+    for (let i = 0; i < 10; i += 1) step();
+    switchLayout('desktop-c');
+    for (let i = 0; i < 60; i += 1) step();
+
+    expect(gridStore.currentLayoutId).toBe('desktop-c');
+    expect(timeline[timeline.length - 1]).toBe(2);
+    // 索引 1 是 desktop-B —— 它是已经过期的中间目标，任何一帧都不该被激活
+    expect(timeline).not.toContain(1);
+  });
+
   it('动画期间的第二次切换不会被丢弃', () => {
     const { container } = render(() => <AnimatedLayoutContainer />);
 

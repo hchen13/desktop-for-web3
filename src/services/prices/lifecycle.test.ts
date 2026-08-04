@@ -308,6 +308,71 @@ describe('pagehide / freeze / pageshow / resume', () => {
   });
 });
 
+describe('恢复事件去重（组合顺序）', () => {
+  it('初次加载的 pageshow 之前没有 suspend，必须是 no-op', () => {
+    const h = createHarness();
+    const before = h.modes.length;
+
+    window.dispatchEvent(new Event('pageshow'));
+
+    expect(h.resumes).toBe(0);
+    expect(h.modes).toHaveLength(before);
+    h.lifecycle.stop();
+  });
+
+  it('pagehide → pageshow 只恢复一次', () => {
+    const h = createHarness();
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pageshow'));
+
+    expect(h.resumes).toBe(1);
+    h.lifecycle.stop();
+  });
+
+  it('freeze → resume 只恢复一次', () => {
+    const h = createHarness();
+    document.dispatchEvent(new Event('freeze'));
+    document.dispatchEvent(new Event('resume'));
+
+    expect(h.resumes).toBe(1);
+    h.lifecycle.stop();
+  });
+
+  it('pagehide → freeze → resume → pageshow 整个序列只恢复一次', () => {
+    const h = createHarness();
+
+    window.dispatchEvent(new Event('pagehide'));
+    document.dispatchEvent(new Event('freeze'));
+    document.dispatchEvent(new Event('resume'));
+    window.dispatchEvent(new Event('pageshow'));
+
+    expect(h.resumes).toBe(1);
+    expect(h.lifecycle.getMode()).toBe('realtime');
+    h.lifecycle.stop();
+  });
+
+  it('重复的 pageshow 不会重复恢复', () => {
+    const h = createHarness();
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pageshow'));
+    window.dispatchEvent(new Event('pageshow'));
+    document.dispatchEvent(new Event('resume'));
+
+    expect(h.resumes).toBe(1);
+    h.lifecycle.stop();
+  });
+
+  it('没有 active symbol 时恢复不触发刷新', () => {
+    const h = createHarness(false);
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pageshow'));
+
+    expect(h.resumes).toBe(0);
+    expect(h.lifecycle.getMode()).toBe('off');
+    h.lifecycle.stop();
+  });
+});
+
 describe('清理', () => {
   it('stop 之后不再有 timer 与 listener 残留', () => {
     const h = createHarness();
