@@ -52,6 +52,9 @@ export function candidateInstruments(assetKey: AssetKey, tier: SourceTier): Venu
   const category = assetKeyCategory(key);
   if (!meta || !category) return [];
 
+  // Tier 3 只有 Hyperliquid HIP-3，必须来自经过 deployer 校验的 catalog，不能凭 symbol 猜
+  if (tier === 3) return [];
+
   if (category === 'crypto') return tier === 1 ? cryptoSpotCandidates(meta) : [];
   if (category === 'stock' || category === 'etf') {
     return tier === 1
