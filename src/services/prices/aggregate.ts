@@ -22,6 +22,12 @@ export const OUTLIER_THRESHOLD = 0.02;
 /** 两个来源时，价差超过这个比例就不做平均 */
 export const DIVERGENCE_THRESHOLD = 0.02;
 
+/** 行情自身允许的最大年龄；超过就当作 stale，不再算 live */
+export const MARKET_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/** 同层同 PriceKind 下多种计价货币并存时的取舍顺序 */
+const QUOTE_CURRENCY_PRIORITY = ['USDT', 'USDC', 'FDUSD', 'USD'];
+
 /** 价差相同、时间戳也相同时的固定 venue 优先级 */
 export const VENUE_PRIORITY: readonly Venue[] = ['okx', 'bitget', 'binance', 'hyperliquid'];
 
@@ -75,7 +81,7 @@ export function unavailableSnapshot(
     sourceCount: 0,
     quality: 'unavailable',
     coverageTier: 'unavailable',
-    quoteCurrency: cached?.quoteCurrency ?? 'USD',
+    quoteCurrency: cached?.quoteCurrency ?? '',
     productKind: null,
     priceKind: null,
   };
@@ -87,7 +93,11 @@ export function aggregateSnapshot(options: AggregateOptions): PriceSnapshot | nu
   const valid = quotes.filter((q) => Number.isFinite(q.price) && q.price > 0);
   if (valid.length === 0) return null;
 
-  const fresh = valid.filter((q) => now - q.receivedAt <= freshnessWindowMs);
+  // receivedAt 只说明「我们刚收到响应」，行情自身可能早就停住了（退市 symbol 仍会返回 200 + 旧价），
+  // 所以两个时间都要看
+  const fresh = valid.filter(
+    (q) => now - q.receivedAt <= freshnessWindowMs && now - q.sourceTimestamp <= MARKET_MAX_AGE_MS,
+  );
   if (fresh.length === 0) {
     return staleSnapshot(assetKey, symbol, valid);
   }
@@ -96,8 +106,8 @@ export function aggregateSnapshot(options: AggregateOptions): PriceSnapshot | nu
   if (!group) return staleSnapshot(assetKey, symbol, valid);
 
   const { tier, members } = group;
-  const price = combinePrices(members);
-  const representative = pickRepresentative(members, price);
+  const { price, accepted } = combinePrices(members);
+  const representative = pickRepresentative(accepted, price);
 
   return {
     assetKey,
@@ -105,12 +115,13 @@ export function aggregateSnapshot(options: AggregateOptions): PriceSnapshot | nu
     price,
     change24h: representative.change24h,
     volume24h: representative.volume24h,
-    lastUpdate: Math.max(...members.map((m) => m.sourceTimestamp)),
+    // 被剔除的来源既不计数也不能贡献时间戳，否则一个离群的新报价会让整体看起来比实际新
+    lastUpdate: Math.max(...accepted.map((m) => m.sourceTimestamp)),
     source: representative.venue,
-    sources: dedupeVenues(members),
-    sourceCount: members.length,
+    sources: dedupeVenues(accepted),
+    sourceCount: accepted.length,
     quality: tier === 1 ? 'live' : 'degraded',
-    coverageTier: coverageTierFor(tier, members.length, category),
+    coverageTier: coverageTierFor(tier, accepted.length, category, representative.priceKind),
     quoteCurrency: representative.quoteCurrency,
     productKind: representative.productKind,
     priceKind: representative.priceKind,
@@ -142,36 +153,69 @@ function staleSnapshot(
   };
 }
 
-/** 取最高可用 Tier，并在层内取优先级最高的 PriceKind 分组 */
+/**
+ * 取最高可用 Tier，层内取优先级最高的 PriceKind，再按计价货币分组。
+ * USDT 与 USDC 报价不是同一个东西，不能直接平均。
+ */
 function selectGroup(quotes: VenueQuote[]): { tier: SourceTier; members: VenueQuote[] } | null {
   for (const tier of [1, 2, 3] as const) {
     const inTier = quotes.filter((q) => quoteTier(q) === tier);
     if (inTier.length === 0) continue;
     for (const kind of PRICE_KIND_PRIORITY[tier]) {
-      const members = inTier.filter((q) => q.priceKind === kind);
-      if (members.length > 0) return { tier, members };
+      const sameKind = inTier.filter((q) => q.priceKind === kind);
+      if (sameKind.length === 0) continue;
+      const byCurrency = new Map<string, VenueQuote[]>();
+      for (const q of sameKind) {
+        const list = byCurrency.get(q.quoteCurrency);
+        if (list) list.push(q);
+        else byCurrency.set(q.quoteCurrency, [q]);
+      }
+      let best: VenueQuote[] | null = null;
+      for (const currency of QUOTE_CURRENCY_PRIORITY) {
+        const list = byCurrency.get(currency);
+        if (list && (!best || list.length > best.length)) best = list;
+      }
+      if (!best) {
+        for (const list of byCurrency.values()) {
+          if (!best || list.length > best.length) best = list;
+        }
+      }
+      if (best) return { tier, members: best };
     }
   }
   return null;
 }
 
-function combinePrices(members: VenueQuote[]): number {
-  if (members.length === 1) return members[0].price;
+interface Combined {
+  price: number;
+  /** 真正参与定价的来源；被剔除或被放弃的不在其中 */
+  accepted: VenueQuote[];
+}
+
+function combinePrices(members: VenueQuote[]): Combined {
+  if (members.length === 1) return { price: members[0].price, accepted: members };
 
   if (members.length === 2) {
     const [a, b] = members;
     const mean = (a.price + b.price) / 2;
     const spread = Math.abs(a.price - b.price) / mean;
-    if (spread <= DIVERGENCE_THRESHOLD) return mean;
-    if (a.sourceTimestamp !== b.sourceTimestamp) {
-      return a.sourceTimestamp > b.sourceTimestamp ? a.price : b.price;
-    }
-    return venueRank(a.venue) <= venueRank(b.venue) ? a.price : b.price;
+    if (spread <= DIVERGENCE_THRESHOLD) return { price: mean, accepted: members };
+    // 分歧过大时只采用一个来源，因此不能再声称是多家共识
+    const winner =
+      a.sourceTimestamp !== b.sourceTimestamp
+        ? a.sourceTimestamp > b.sourceTimestamp
+          ? a
+          : b
+        : venueRank(a.venue) <= venueRank(b.venue)
+          ? a
+          : b;
+    return { price: winner.price, accepted: [winner] };
   }
 
   const first = median(members.map((m) => m.price));
   const kept = members.filter((m) => Math.abs(m.price - first) / first <= OUTLIER_THRESHOLD);
-  return kept.length > 0 ? median(kept.map((m) => m.price)) : first;
+  if (kept.length === 0) return { price: first, accepted: members };
+  return { price: median(kept.map((m) => m.price)), accepted: kept };
 }
 
 /**
@@ -200,8 +244,16 @@ function dedupeVenues(members: VenueQuote[]): Venue[] {
   return VENUE_PRIORITY.filter((v) => seen.has(v));
 }
 
-function coverageTierFor(tier: SourceTier, count: number, category: AssetCategory): CoverageTier {
-  if (tier === 3) return 'trusted-oracle-fallback';
+function coverageTierFor(
+  tier: SourceTier,
+  count: number,
+  category: AssetCategory,
+  priceKind: PriceKind,
+): CoverageTier {
+  // HIP-3 的 l2Book 中间价只是盘口参考，不是 builder oracle，不能共用同一个标签
+  if (tier === 3) {
+    return priceKind === 'oracle' ? 'trusted-oracle-fallback' : 'derivative-reference';
+  }
   if (tier === 2) return 'derivative-reference';
   if (count === 1) return 'single-source';
   return category === 'stock' || category === 'etf' ? 'tokenized-spot-consensus' : 'spot-consensus';

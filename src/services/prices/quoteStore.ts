@@ -39,6 +39,20 @@ export class QuoteStore {
     return out;
   }
 
+  /** 按条件丢弃某个资产的部分报价（例如换层之后清掉旧层的残留） */
+  dropWhere(assetKey: AssetKey, predicate: (quote: VenueQuote) => boolean): void {
+    const keys = this.instrumentsByAsset.get(assetKey);
+    if (!keys) return;
+    for (const key of Array.from(keys)) {
+      const quote = this.byInstrument.get(key);
+      if (quote && predicate(quote)) {
+        this.byInstrument.delete(key);
+        keys.delete(key);
+      }
+    }
+    if (keys.size === 0) this.instrumentsByAsset.delete(assetKey);
+  }
+
   /** 资产被移出订阅时释放它的报价，避免长时间留存过期数据 */
   dropAsset(assetKey: AssetKey): void {
     const keys = this.instrumentsByAsset.get(assetKey);

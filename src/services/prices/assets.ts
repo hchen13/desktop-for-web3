@@ -189,7 +189,8 @@ const CRYPTO: AssetMeta[] = [
     name: 'Tether',
     category: 'crypto',
     rank: 3,
-    cexPair: { base: 'BTC', quote: 'USDT' },
+    // 没有 USDT 计价的 USDT 交易对；本服务也不做倒数报价，
+    // 所以宁可让它 unavailable，也不能借用 BTC-USDT 之类把别的资产价格写进 USDT
     logoSlug: 'tether',
   },
   {

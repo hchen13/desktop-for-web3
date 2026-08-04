@@ -81,6 +81,12 @@ export interface VenueQuote {
   sourceTimestamp: number;
   /** 本地收到的时间戳 */
   receivedAt: number;
+  /**
+   * 交易所是否给出了这条 instrument 仍可交易的证据（有效盘口）。
+   * false 表示明确不可交易（已退市 symbol 往往仍返回 200 + 旧的 lastPrice，但盘口为 0）；
+   * undefined 表示该接口没提供这个信息。
+   */
+  tradable?: boolean;
 }
 
 /** 聚合结果的覆盖等级 */

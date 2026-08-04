@@ -15,6 +15,7 @@
 import type { VenueInstrument, VenueQuote } from '../types';
 import type { SocketEndpoint } from '../socket';
 import {
+  bestQuoteIsTradable,
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
   equityCategoryFor,
@@ -205,6 +206,8 @@ interface BinanceSpotTicker {
   priceChangePercent?: string;
   quoteVolume?: string;
   closeTime?: number;
+  bidPrice?: string;
+  askPrice?: string;
 }
 
 interface BinancePremiumIndex {
@@ -237,6 +240,7 @@ export function normalizeBinanceSpotTicker(
     change24h: toNumber(raw.priceChangePercent),
     volume24h: toNumber(raw.quoteVolume),
     sourceTimestamp: toNumber(raw.closeTime),
+    tradable: bestQuoteIsTradable(toNumber(raw.bidPrice), toNumber(raw.askPrice)),
   });
 }
 

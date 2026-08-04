@@ -35,12 +35,17 @@ import {
 } from './venues/okx';
 import { CRYPTO_QUOTE_PRIORITY } from './venues/shared';
 
-const STORAGE_KEY = 'exchange_catalog_v1';
+const STORAGE_KEY = 'exchange_catalog_v2';
+/** v1 只有一个全局 timestamp，无法表达「部分 venue 失败」，直接作废 */
+const OBSOLETE_CATALOG_KEYS = ['exchange_catalog_v1'];
 export const CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 
+const ALL_VENUES: readonly Venue[] = ['okx', 'bitget', 'binance', 'hyperliquid'];
+
 interface PersistedCatalog {
-  version: 'v1';
-  timestamp: number;
+  version: 'v2';
+  /** 每个 venue 各自的最近一次成功刷新时间；失败的 venue 保留旧 mapping 但不推进时间 */
+  venueTimestamps: Partial<Record<Venue, number>>;
   instruments: VenueInstrument[];
 }
 
@@ -109,7 +114,7 @@ export interface CatalogEntry {
 class ExchangeCatalog {
   private instrumentsByAsset = new Map<AssetKey, VenueInstrument[]>();
   private dynamicAssets = new Map<AssetKey, AssetMeta>();
-  private timestamp = 0;
+  private venueTimestamps = new Map<Venue, number>();
   private cacheReadPromise: Promise<void> | null = null;
   private refreshPromise: Promise<void> | null = null;
   private listeners = new Set<() => void>();
@@ -136,8 +141,22 @@ class ExchangeCatalog {
     await refresh;
   }
 
+  /** 只有每个 venue 都在 TTL 内成功刷新过才算 fresh；否则下次开弹窗要重试失败的那家 */
   isFresh(): boolean {
-    return this.hasData() && Date.now() - this.timestamp < CATALOG_TTL_MS;
+    if (!this.hasData()) return false;
+    const now = Date.now();
+    return ALL_VENUES.every((venue) => {
+      const at = this.venueTimestamps.get(venue);
+      return at != null && now - at < CATALOG_TTL_MS;
+    });
+  }
+
+  staleVenues(): Venue[] {
+    const now = Date.now();
+    return ALL_VENUES.filter((venue) => {
+      const at = this.venueTimestamps.get(venue);
+      return at == null || now - at >= CATALOG_TTL_MS;
+    });
   }
 
   hasData(): boolean {
@@ -145,7 +164,9 @@ class ExchangeCatalog {
   }
 
   lastUpdated(): number {
-    return this.timestamp;
+    let newest = 0;
+    for (const at of this.venueTimestamps.values()) newest = Math.max(newest, at);
+    return newest;
   }
 
   onUpdate(listener: () => void): () => void {
@@ -222,7 +243,7 @@ class ExchangeCatalog {
   async mergeResolvedInstruments(instruments: VenueInstrument[]): Promise<void> {
     if (instruments.length === 0) return;
     const merged = dedupeInstruments([...this.allInstruments(), ...instruments]);
-    this.apply(merged, this.timestamp);
+    this.apply(merged);
     await this.writeCache();
   }
 
@@ -239,7 +260,7 @@ class ExchangeCatalog {
   __resetForTest(): void {
     this.instrumentsByAsset.clear();
     this.dynamicAssets.clear();
-    this.timestamp = 0;
+    this.venueTimestamps.clear();
     this.cacheReadPromise = null;
     this.refreshPromise = null;
     this.listeners.clear();
@@ -306,14 +327,17 @@ class ExchangeCatalog {
       refreshedVenues.add('hyperliquid');
     }
 
-    // 单个 venue 失败只降级该 venue：沿用它上一版的 instrument mapping
+    // 单个 venue 失败只降级该 venue：沿用它上一版的 instrument mapping，
+    // 但绝不推进它的时间戳，否则下一次 ensureFresh 会以为它已经刷新过
     const carried = this.allInstruments().filter((i) => !refreshedVenues.has(i.venue));
-    this.apply(dedupeInstruments([...fresh, ...carried]), Date.now());
+    const now = Date.now();
+    for (const venue of refreshedVenues) this.venueTimestamps.set(venue, now);
+    this.apply(dedupeInstruments([...fresh, ...carried]));
     await this.writeCache();
     this.notify();
   }
 
-  private apply(instruments: VenueInstrument[], timestamp: number): void {
+  private apply(instruments: VenueInstrument[]): void {
     const byAsset = new Map<AssetKey, VenueInstrument[]>();
     const dynamic = new Map<AssetKey, AssetMeta>();
 
@@ -333,7 +357,6 @@ class ExchangeCatalog {
 
     this.instrumentsByAsset = byAsset;
     this.dynamicAssets = dynamic;
-    this.timestamp = timestamp;
   }
 
   private notify(): void {
@@ -348,18 +371,22 @@ class ExchangeCatalog {
 
   private async readCache(): Promise<void> {
     if (!isChromeStorageAvailable()) return;
+    void chrome.storage.local.remove(OBSOLETE_CATALOG_KEYS);
     const result = await chrome.storage.local.get(STORAGE_KEY);
     const cached = result?.[STORAGE_KEY] as PersistedCatalog | undefined;
-    if (cached?.version !== 'v1' || !Array.isArray(cached.instruments)) return;
-    this.apply(cached.instruments, cached.timestamp ?? 0);
+    if (cached?.version !== 'v2' || !Array.isArray(cached.instruments)) return;
+    for (const [venue, at] of Object.entries(cached.venueTimestamps ?? {})) {
+      if (typeof at === 'number') this.venueTimestamps.set(venue as Venue, at);
+    }
+    this.apply(cached.instruments);
   }
 
   private async writeCache(): Promise<void> {
     if (!isChromeStorageAvailable()) return;
     try {
       const payload: PersistedCatalog = {
-        version: 'v1',
-        timestamp: this.timestamp,
+        version: 'v2',
+        venueTimestamps: Object.fromEntries(this.venueTimestamps) as Partial<Record<Venue, number>>,
         instruments: this.allInstruments(),
       };
       await chrome.storage.local.set({ [STORAGE_KEY]: payload });

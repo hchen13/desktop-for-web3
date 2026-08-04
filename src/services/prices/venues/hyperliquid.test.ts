@@ -163,11 +163,30 @@ describe('HIP-3 报价', () => {
       time: 1785738697071,
       levels: [[{ px: '308.89' }], [{ px: '308.91' }]],
     });
-    expect(quote).toMatchObject({ priceKind: 'mid', sourceTimestamp: 1785738697071 });
+    expect(quote).toMatchObject({ priceKind: 'mid' });
     expect(quote!.price).toBeCloseTo(308.9, 6);
   });
 
   it('盘口缺失时返回 null', () => {
     expect(normalizeHyperliquidL2Book(instrument, { levels: [[], []] })).toBeNull();
+  });
+
+  it('REST 与 WS 两条路径用同一个时钟域，避免单调性把其中一路丢掉', () => {
+    // activeAssetCtx 不带服务端时间戳，所以 l2Book 也不能用 book.time，
+    // 否则本地时钟与 HL 服务端时钟之间的偏差会让 QuoteStore 静默拒收其中一路
+    const before = Date.now();
+    const rest = normalizeHyperliquidL2Book(instrument, {
+      coin: 'xyz:AAPL',
+      time: 1,
+      levels: [[{ px: '100' }], [{ px: '102' }]],
+    })!;
+    const after = Date.now();
+
+    expect(rest.sourceTimestamp).toBeGreaterThanOrEqual(before);
+    expect(rest.sourceTimestamp).toBeLessThanOrEqual(after);
+    expect(rest.sourceTimestamp).toBe(rest.receivedAt);
+
+    const ws = normalizeHyperliquidCtx(instrument, { oraclePx: '101' })!;
+    expect(ws.sourceTimestamp).toBeGreaterThanOrEqual(rest.sourceTimestamp);
   });
 });

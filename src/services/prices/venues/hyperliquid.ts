@@ -191,12 +191,17 @@ export function normalizeHyperliquidL2Book(
   const bid = toNumber(book.levels?.[0]?.[0]?.px);
   const ask = toNumber(book.levels?.[1]?.[0]?.px);
   if (!Number.isFinite(bid) || !Number.isFinite(ask) || bid <= 0 || ask <= 0) return null;
+  // activeAssetCtx 不带服务端时间戳，WS 那条路径只能用本地时钟；这里若用 book.time
+  // 就会让同一个 instrument 的两条路径落在不同时钟域，QuoteStore 的单调性会静默丢弃其中一路
+  const now = Date.now();
   return makeQuote(instrument, {
     price: (bid + ask) / 2,
     priceKind: 'mid',
     change24h: null,
     volume24h: null,
-    sourceTimestamp: toNumber(book.time),
+    sourceTimestamp: now,
+    receivedAt: now,
+    tradable: true,
   });
 }
 

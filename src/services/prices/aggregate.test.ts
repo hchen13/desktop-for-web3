@@ -17,7 +17,7 @@ function quote(
     instrumentId: `${venue}-inst`,
     productKind,
     priceKind: overrides.priceKind ?? 'last',
-    quoteCurrency: 'USDT',
+    quoteCurrency: overrides.quoteCurrency ?? 'USDT',
     price,
     change24h: overrides.change24h ?? 1,
     volume24h: overrides.volume24h ?? 100,
@@ -53,8 +53,9 @@ describe('同 Tier 聚合', () => {
       quote('binance', 200), // 离群
     ]);
     expect(snap!.price).toBe(100.5);
-    expect(snap!.sourceCount).toBe(3);
-    expect(snap!.sources).toEqual(['okx', 'bitget', 'binance']);
+    // 被剔除的离群来源不得再计入共识
+    expect(snap!.sourceCount).toBe(2);
+    expect(snap!.sources).toEqual(['okx', 'bitget']);
   });
 
   it('三个来源都在阈值内时取剩余值的 median', () => {
@@ -98,6 +99,66 @@ describe('同 Tier 聚合', () => {
       'crypto',
     );
     expect(snap!.coverageTier).toBe('spot-consensus');
+  });
+});
+
+describe('accepted members 决定共识口径', () => {
+  it('两来源严重分歧时只采用一个，不得显示成多家共识', () => {
+    const snap = aggregate([
+      quote('okx', 100, { sourceTimestamp: NOW - 5000, volume24h: 10 }),
+      quote('bitget', 130, { sourceTimestamp: NOW - 1000, volume24h: 20 }),
+    ]);
+    expect(snap!.price).toBe(130);
+    expect(snap!.sourceCount).toBe(1);
+    expect(snap!.sources).toEqual(['bitget']);
+    expect(snap!.coverageTier).toBe('single-source');
+    expect(snap!.source).toBe('bitget');
+    expect(snap!.volume24h).toBe(20);
+  });
+
+  it('剔除离群值后 lastUpdate 不能来自被剔除的来源', () => {
+    const snap = aggregate([
+      quote('okx', 100, { sourceTimestamp: NOW - 5000 }),
+      quote('bitget', 101, { sourceTimestamp: NOW - 4000 }),
+      quote('binance', 200, { sourceTimestamp: NOW - 10 }),
+    ]);
+    expect(snap!.sourceCount).toBe(2);
+    expect(snap!.sources).toEqual(['okx', 'bitget']);
+    expect(snap!.lastUpdate).toBe(NOW - 4000);
+  });
+
+  it('USDT 与 USDC 报价不混在同一个平均值里', () => {
+    const snap = aggregate([
+      quote('okx', 100, { quoteCurrency: 'USDT' }),
+      quote('bitget', 100.2, { quoteCurrency: 'USDT' }),
+      quote('binance', 130, { quoteCurrency: 'USDC' }),
+    ]);
+    expect(snap!.quoteCurrency).toBe('USDT');
+    expect(snap!.sourceCount).toBe(2);
+    expect(snap!.sources).toEqual(['okx', 'bitget']);
+    expect(snap!.price).toBeCloseTo(100.1, 6);
+  });
+
+  it('只有 USDC 报价时如实标 USDC，不冒充 USD', () => {
+    const snap = aggregate([quote('binance', 100, { quoteCurrency: 'USDC' })]);
+    expect(snap!.quoteCurrency).toBe('USDC');
+  });
+});
+
+describe('Hyperliquid 价格语义', () => {
+  it('HIP-3 的 l2Book mid 不能标成 oracle 兜底', () => {
+    const snap = aggregate([
+      quote('hyperliquid', 305, { productKind: 'hip3_perp', priceKind: 'mid' }),
+    ]);
+    expect(snap!.priceKind).toBe('mid');
+    expect(snap!.coverageTier).toBe('derivative-reference');
+  });
+
+  it('只有真正的 oracle 报价才用 trusted-oracle 标签', () => {
+    const snap = aggregate([
+      quote('hyperliquid', 305, { productKind: 'hip3_perp', priceKind: 'oracle' }),
+    ]);
+    expect(snap!.coverageTier).toBe('trusted-oracle-fallback');
   });
 });
 

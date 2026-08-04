@@ -24,7 +24,16 @@ function instrument(
 
 async function seedCache(instruments: VenueInstrument[], timestamp: number): Promise<void> {
   await chrome.storage.local.set({
-    [EXCHANGE_CATALOG_STORAGE_KEY]: { version: 'v1', timestamp, instruments },
+    [EXCHANGE_CATALOG_STORAGE_KEY]: {
+      version: 'v2',
+      venueTimestamps: {
+        okx: timestamp,
+        bitget: timestamp,
+        binance: timestamp,
+        hyperliquid: timestamp,
+      },
+      instruments,
+    },
   });
 }
 
@@ -267,6 +276,67 @@ describe('catalog 合并规则', () => {
     expect(exchangeCatalog.instrumentsFor('stock:TSLA').map((i) => i.venue)).toEqual(['okx']);
     // Bitget 失败，但它上一版的 mapping 仍然保留
     expect(exchangeCatalog.instrumentsFor('stock:NVDA').map((i) => i.venue)).toEqual(['bitget']);
+  });
+
+  it('部分 venue 失败时不推进该 venue 的时间戳，下一次 ensureFresh 会重试', async () => {
+    const okxSpot = [
+      {
+        instType: 'SPOT',
+        instId: 'XTSLA-USDT',
+        instCategory: '3',
+        baseCcy: 'XTSLA',
+        quoteCcy: 'USDT',
+        state: 'live',
+      },
+    ];
+    const bitgetSpot = [
+      {
+        symbol: 'RNVDAUSDT',
+        category: 'SPOT',
+        baseCoin: 'rNVDA',
+        quoteCoin: 'USDT',
+        symbolType: 'stock',
+        isReality: 'yes',
+        status: 'online',
+      },
+    ];
+
+    // 第一次：Bitget 挂掉
+    mockVenueFetch({ failVenue: 'bitget', okxSpot });
+    await exchangeCatalog.ensureFresh();
+    await exchangeCatalog.__pendingRefreshForTest();
+
+    expect(exchangeCatalog.instrumentsFor('stock:TSLA')).toHaveLength(1);
+    // OKX 成功不能让整份 catalog 看起来已刷新
+    expect(exchangeCatalog.isFresh()).toBe(false);
+    expect(exchangeCatalog.staleVenues()).toContain('bitget');
+    expect(exchangeCatalog.staleVenues()).not.toContain('okx');
+
+    // 第二次：Bitget 恢复，Bitget-only 的标的能被发现
+    vi.restoreAllMocks();
+    mockVenueFetch({ okxSpot, bitgetSpot });
+    await exchangeCatalog.ensureFresh();
+    await exchangeCatalog.__pendingRefreshForTest();
+
+    expect(exchangeCatalog.instrumentsFor('stock:NVDA').map((i) => i.venue)).toEqual(['bitget']);
+    expect(exchangeCatalog.instrumentsFor('stock:TSLA')).toHaveLength(1);
+    expect(exchangeCatalog.isFresh()).toBe(true);
+    expect(exchangeCatalog.staleVenues()).toHaveLength(0);
+  });
+
+  it('旧的 v1 缓存直接作废，不会被当成已刷新', async () => {
+    await chrome.storage.local.set({
+      exchange_catalog_v1: {
+        version: 'v1',
+        timestamp: Date.now(),
+        instruments: [instrument({ instrumentId: 'XNVDA-USDT', symbol: 'NVDA' })],
+      },
+    });
+
+    await exchangeCatalog.loadCachedOnly();
+
+    expect(exchangeCatalog.hasData()).toBe(false);
+    expect(exchangeCatalog.isFresh()).toBe(false);
   });
 
   it('一个 AssetKey 可以对应多个 venue instrument', async () => {

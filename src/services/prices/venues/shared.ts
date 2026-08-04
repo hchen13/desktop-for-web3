@@ -147,6 +147,7 @@ export function makeQuote(
     volume24h?: number | null;
     sourceTimestamp: number;
     receivedAt?: number;
+    tradable?: boolean;
   },
 ): VenueQuote | null {
   if (!Number.isFinite(params.price) || params.price <= 0) return null;
@@ -167,7 +168,25 @@ export function makeQuote(
     volume24h: normalizeNumber(params.volume24h),
     sourceTimestamp: ts,
     receivedAt: now,
+    tradable: params.tradable,
   };
+}
+
+/**
+ * 已退市的 symbol 往往仍然返回 HTTP 200 和旧的 lastPrice，只是行情时间戳早已停住、
+ * 盘口归零。所以 candidate 验证不能只看「价格是正数」。
+ */
+export function isUsableQuote(quote: VenueQuote, now: number, maxAgeMs: number): boolean {
+  if (quote.tradable === false) return false;
+  return now - quote.sourceTimestamp <= maxAgeMs;
+}
+
+/** 交易所自身把 instrument 标成停牌 / 下架时用的最大行情年龄 */
+export const TRADABLE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+export function bestQuoteIsTradable(bid: number, ask: number): boolean | undefined {
+  if (!Number.isFinite(bid) || !Number.isFinite(ask)) return undefined;
+  return bid > 0 && ask > 0;
 }
 
 export function normalizeNumber(value: number | null | undefined): number | null {

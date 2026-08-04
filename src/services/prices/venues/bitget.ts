@@ -12,6 +12,7 @@
 import type { AssetCategory, VenueInstrument, VenueQuote } from '../types';
 import type { SocketEndpoint } from '../socket';
 import {
+  bestQuoteIsTradable,
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
   CRYPTO_QUOTE_CURRENCIES,
@@ -225,6 +226,8 @@ interface BitgetTicker {
   indexPrice?: string;
   markPrice?: string;
   ts?: string;
+  bid1Price?: string;
+  ask1Price?: string;
 }
 
 export function bitgetCategoryFor(instrument: VenueInstrument): string {
@@ -247,6 +250,7 @@ export function normalizeBitgetTicker(
   const pct = toNumber(raw.price24hPcnt);
   const change24h = Number.isFinite(pct) ? pct * 100 : null;
   const ts = toNumber(raw.ts);
+  const tradable = bestQuoteIsTradable(toNumber(raw.bid1Price), toNumber(raw.ask1Price));
 
   if (instrument.productKind === 'equity_perp' || instrument.productKind === 'commodity_perp') {
     const index = toNumber(raw.indexPrice);
@@ -257,6 +261,7 @@ export function normalizeBitgetTicker(
         change24h,
         volume24h: null,
         sourceTimestamp: ts,
+        tradable,
       });
     }
     const mark = toNumber(raw.markPrice);
@@ -267,6 +272,7 @@ export function normalizeBitgetTicker(
         change24h,
         volume24h: null,
         sourceTimestamp: ts,
+        tradable,
       });
     }
   }
@@ -277,6 +283,7 @@ export function normalizeBitgetTicker(
     change24h,
     volume24h: toNumber(raw.turnover24h),
     sourceTimestamp: ts,
+    tradable,
   });
 }
 

@@ -12,6 +12,7 @@
 import type { VenueInstrument, VenueQuote } from '../types';
 import type { SocketEndpoint } from '../socket';
 import {
+  bestQuoteIsTradable,
   CATALOG_TIMEOUT_MS,
   canonicalSymbolFor,
   CRYPTO_QUOTE_CURRENCIES,
@@ -213,6 +214,8 @@ interface OkxTicker {
   open24h?: string;
   volCcy24h?: string;
   ts?: string;
+  bidPx?: string;
+  askPx?: string;
 }
 
 interface OkxIndexTicker {
@@ -251,6 +254,7 @@ export function normalizeOkxSpotTicker(
     change24h: percentChangeFromOpen(price, toNumber(raw.open24h)),
     volume24h: toNumber(raw.volCcy24h),
     sourceTimestamp: toNumber(raw.ts),
+    tradable: bestQuoteIsTradable(toNumber(raw.bidPx), toNumber(raw.askPx)),
   });
 }
 
