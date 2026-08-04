@@ -30,6 +30,8 @@ let service: PriceService;
 let releaseProbe: Array<() => void>;
 let probeGateOpen: boolean;
 let tier1Requests: number;
+/** probe 卡住期间 Tier 1 是否已经恢复；恢复后放行的那次会返回真实可用报价 */
+let tier1Recovered: boolean;
 
 function instrument(
   venue: VenueInstrument['venue'],
@@ -62,7 +64,11 @@ async function seedCatalog(): Promise<void> {
   });
 }
 
-/** Tier 1 始终失败；Tier 1 的恢复探测请求会卡在 gate 上 */
+/**
+ * Tier 1 起初失败，恢复探测的请求会卡在 gate 上。
+ * gate 放行时如果 tier1Recovered 已置位，就返回一个真实可用的 Tier 1 报价——
+ * 只有这样才能证明失效后的 probe 「有东西可写却没写」。
+ */
 function mockVenues(): void {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input);
@@ -70,7 +76,22 @@ function mockVenues(): void {
     if (url.includes('XAAPL-USDT')) {
       tier1Requests += 1;
       if (!probeGateOpen) await new Promise<void>((resolve) => releaseProbe.push(resolve));
-      return new Response('down', { status: 503 });
+      if (!tier1Recovered) return new Response('down', { status: 503 });
+      return new Response(
+        JSON.stringify({
+          code: '0',
+          data: [
+            {
+              instId: 'XAAPL-USDT',
+              last: '300',
+              open24h: '300',
+              ts: String(Date.now()),
+              bidPx: '300',
+              askPx: '300',
+            },
+          ],
+        }),
+      );
     }
     if (url.includes('symbol=AAPLUSDT')) {
       return new Response(
@@ -130,6 +151,7 @@ beforeEach(() => {
   releaseProbe = [];
   probeGateOpen = true;
   tier1Requests = 0;
+  tier1Recovered = false;
   service = new PriceService();
 });
 
@@ -196,14 +218,17 @@ describe('recovery probe 不得在失效后复活 timer', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('probe 进行中资产被清空：完成后不写状态也不复活 timer', async () => {
+  it('probe 进行中资产被清空：拿到可用的 Tier 1 报价也不写状态、不复活 timer', async () => {
     const unsubscribe = await enterFallbackWithRecoveryPending();
     const snapshotBefore = service.getSnapshot('stock:AAPL')!.price;
+    const catalogBefore = exchangeCatalog.instrumentsFor('stock:AAPL').length;
 
     unsubscribe();
     await service.__settleForTest();
     expect(service.__transportModeForTest()).toBe('off');
 
+    // 卡住的那次探测这时才恢复成功：有东西可写，才能证明它确实什么都没写
+    tier1Recovered = true;
     await drainProbe();
 
     const before = tier1Requests;
@@ -213,7 +238,28 @@ describe('recovery probe 不得在失效后复活 timer', () => {
     expect(tier1Requests).toBe(before);
     expect(service.__recoveryTimerActiveForTest()).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
-    // 资产已经不在 union 里，probe 的结果不得改写它的快照
+    expect(service.__connectionCountForTest()).toBe(0);
+    // 资产已经不在 union 里：快照、effective tier、desired set、catalog 缓存都不得被改写
     expect(service.getSnapshot('stock:AAPL')?.price).toBe(snapshotBefore);
+    expect(service.__desiredInstrumentsForTest()).toEqual([]);
+    expect(exchangeCatalog.instrumentsFor('stock:AAPL')).toHaveLength(catalogBefore);
+  });
+
+  it('probe 进行中转 passive-visible：拿到可用报价也不得升回 Tier 1 或复活 timer', async () => {
+    await enterFallbackWithRecoveryPending();
+    const snapshotBefore = service.getSnapshot('stock:AAPL')!.price;
+
+    focused = false;
+    window.dispatchEvent(new Event('blur'));
+    vi.advanceTimersByTime(BLUR_GRACE_MS);
+    expect(service.__transportModeForTest()).toBe('passive-visible');
+
+    tier1Recovered = true;
+    await drainProbe();
+
+    expect(service.__recoveryTimerActiveForTest()).toBe(false);
+    // 探测在失效后完成，不得把 effective tier 拉回 Tier 1
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(snapshotBefore);
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual(['AAPLUSDT']);
   });
 });

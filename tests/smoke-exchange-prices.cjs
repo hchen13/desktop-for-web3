@@ -21,12 +21,22 @@ const PROFILE = path.resolve(__dirname, 'playwright-profile-smoke');
 function ensureProfileUsable() {
   if (!fs.existsSync(PROFILE)) return;
   const lock = path.join(PROFILE, 'SingletonLock');
-  if (fs.existsSync(lock)) {
-    throw new Error(
-      `测试 profile 疑似被占用或上次异常退出：${PROFILE}\n` +
-        '请先确认没有残留的 Chrome 进程，然后手动删除该目录后重试（脚本不会自动递归删除）。',
-    );
+  // Chromium 的 SingletonLock 是指向 host-pid 的符号链接，进程消失后就变成悬空链接。
+  // existsSync 会跟随链接、对悬空链接返回 false，必须用 lstat 才看得到它还在
+  let held = false;
+  try {
+    fs.lstatSync(lock);
+    held = true;
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
   }
+  if (!held) return;
+  throw new Error(
+    `测试 profile 疑似被占用或上次异常退出。\n` +
+      `  profile: ${PROFILE}\n` +
+      `  锁文件:  ${lock}\n` +
+      '请自行确认没有残留的 Chrome 进程并决定如何处理该 profile 后重试；本脚本不会删除任何文件。',
+  );
 }
 
 const failures = [];
