@@ -175,14 +175,51 @@ const CREDENTIAL_RULES: Array<{ name: string; pattern: RegExp }> = [
     pattern:
       /["'`]?(api[-_]?key|apikey|authorization|bearer|secret|access[-_]?token)["'`]?\s*[:=]\s*["'`][^"'`]{8,}/i,
   },
+  // 单独的标识符或对象 key `token`。前面要求非标识符字符，后面要求紧跟 [:=]，
+  // 所以 tokenized_stock_spot 这种正当写法不会被误伤
   {
-    name: '要求调用方提供 API Key 的行情客户端',
-    pattern: /\b(apiKey|accessToken)\s*[?]?\s*:\s*string/,
+    name: '硬编码 token',
+    pattern: /(^|[^A-Za-z0-9_$.])["'`]?token["'`]?\s*[:=]\s*["'`][^"'`]{8,}/i,
+  },
+  {
+    name: '要求调用方提供凭据',
+    pattern: /(^|[^A-Za-z0-9_$.])(apiKey|accessToken|token)\s*\??\s*:\s*string\b/,
   },
 ];
 
 export function scanForCredentialViolations(text: string): string[] {
   return CREDENTIAL_RULES.filter((rule) => rule.pattern.test(text)).map((rule) => rule.name);
+}
+
+/**
+ * 依赖名里出现 pyth / hermes 就当成行情客户端依赖。
+ * 只看名字的词首，`topojson-client` 这类正常包不会被误判。
+ */
+const PYTH_CLIENT_NAME = /(^|[@/_-])(pyth|hermes)/i;
+
+export function scanDependenciesForPythClients(deps: Record<string, unknown>): string[] {
+  return Object.keys(deps).filter((name) => PYTH_CLIENT_NAME.test(name));
+}
+
+/** package.json 的 runtime dependencies（不含 devDependencies） */
+function runtimeDependencies(): Record<string, string> {
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>;
+  };
+  return pkg.dependencies ?? {};
+}
+
+/** package-lock 里所有非 dev 的已安装包 */
+function lockfileRuntimePackages(): Record<string, string> {
+  const lock = JSON.parse(fs.readFileSync(path.join(REPO, 'package-lock.json'), 'utf8')) as {
+    packages?: Record<string, { dev?: boolean; version?: string }>;
+  };
+  const out: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(lock.packages ?? {})) {
+    if (!key || entry.dev) continue;
+    out[key.replace(/^.*node_modules\//, '')] = entry.version ?? '';
+  }
+  return out;
 }
 
 function priceRuntimeFiles(): string[] {
@@ -227,6 +264,10 @@ describe('行情链路不得引入凭据或 Pyth 依赖', () => {
       `const key = import.meta.env.VITE_MARKET_KEY;`,
       `const headers = { Authorization: 'Bearer sk-live-0123456789abcdef' };`,
       `export interface Options { apiKey: string }`,
+      `const token = '0123456789abcdef';`,
+      `const auth = { token: '0123456789abcdef' };`,
+      `export interface Options { token: string }`,
+      `export interface Options { token?: string }`,
     ];
     for (const sample of violating) {
       expect(scanForCredentialViolations(sample), sample).not.toEqual([]);
@@ -241,10 +282,41 @@ describe('行情链路不得引入凭据或 Pyth 依赖', () => {
       `export const BITGET_WS_URL = 'wss://ws.bitget.com/v3/ws/public';`,
       `const logo = 'pyth-network.svg';`,
       `fetchJson(url, { headers: { 'Content-Type': 'application/json' } })`,
+      `productKind: 'tokenized_stock_spot',`,
+      `if (instrument.productKind === 'tokenized_stock_spot') return 1;`,
+      `const tokenized = candidates.filter((c) => c.productKind === 'tokenized_stock_spot');`,
     ];
     for (const sample of legitimate) {
       expect(scanForCredentialViolations(sample), sample).toEqual([]);
     }
+  });
+
+  it('runtime dependency 门禁能识别 Pyth/Hermes 客户端', () => {
+    expect(
+      scanDependenciesForPythClients({
+        'solid-js': '^1.8.0',
+        '@pythnetwork/hermes-client': '^1.0.0',
+      }),
+    ).toEqual(['@pythnetwork/hermes-client']);
+    expect(
+      scanDependenciesForPythClients({ 'pyth-evm-js': '^1.0.0', 'hermes-sdk': '^2.0.0' }).sort(),
+    ).toEqual(['hermes-sdk', 'pyth-evm-js']);
+    // 合法依赖不得误报
+    expect(
+      scanDependenciesForPythClients({
+        'solid-js': '^1.8.0',
+        'd3-geo': '^3.1.1',
+        xml2js: '^0.6.2',
+      }),
+    ).toEqual([]);
+  });
+
+  it('真实 runtime dependency 与 lockfile 非 dev 包都没有 Pyth/Hermes 客户端', () => {
+    expect(scanDependenciesForPythClients(runtimeDependencies())).toEqual([]);
+    expect(scanDependenciesForPythClients(lockfileRuntimePackages())).toEqual([]);
+    // 门禁必须真的读到了东西，否则它只是恒真
+    expect(Object.keys(runtimeDependencies()).length).toBeGreaterThan(0);
+    expect(Object.keys(lockfileRuntimePackages()).length).toBeGreaterThan(0);
   });
 
   it('行情运行时代码全部通过', () => {
