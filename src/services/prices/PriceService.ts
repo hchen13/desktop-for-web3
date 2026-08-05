@@ -85,7 +85,7 @@ interface CandidateProbe {
 
 /** doResolve 交给紧随其后那次刷新的证据：本轮试过哪些层、在哪一层拿到了报价 */
 interface ResolutionHandoff {
-  epoch: number;
+  owner: OperationOwner;
   attempted: Set<SourceTier>;
   quotedTier: SourceTier | null;
 }
@@ -121,6 +121,13 @@ function normalizeKeys(assetKeys: Set<AssetKey>): Set<AssetKey> {
   const out = new Set<AssetKey>();
   for (const key of assetKeys) out.add(migrateAssetKey(key));
   return out;
+}
+
+/** 完整 owner 相等：三个维度全都要对得上，少比一个就会让跨 regime 的旧操作蒙混过关 */
+function sameOwner(a: OperationOwner, b: OperationOwner): boolean {
+  return (
+    a.assetKey === b.assetKey && a.assetEpoch === b.assetEpoch && a.regimeEpoch === b.regimeEpoch
+  );
 }
 
 /** candidate 的稳定身份：资产 + venue + instrumentId + productKind */
@@ -159,6 +166,9 @@ export class PriceService {
     },
     onResume: () => {
       if (this.wanted.size === 0) return;
+      // 跨过 suspend 的那一轮 reconcile 已经作废，当前 wanted union 需要重新对账；
+      // 先同步登记这一轮 refresh，reconcile 的 microtask 只会并进来，不会另起一轮
+      this.scheduleReconcile();
       void this.refreshAssets().catch(() => {});
     },
   });
@@ -448,20 +458,27 @@ export class PriceService {
 
     // 先判定模式，再发第一个 resolver 请求：listener 与 visibility/focus/suspended
     // 必须早于网络。这一步在 reconcile 里做，订阅抖动已经被 microtask 合并过了
+    // 注意不要在这里清 enteredRealtimeDuringReconcile：onModeChange 可能在 reconcile
+    // 的 microtask 排队之后、执行之前就把首刷的责任记到了这里
     this.reconciling = true;
-    this.enteredRealtimeDuringReconcile = false;
     try {
       this.lifecycle.start();
       this.lifecycle.reconcileDesiredMode();
     } finally {
       this.reconciling = false;
     }
+    const regime = this.regimeEpoch;
 
     await Promise.all([...union].map((key) => this.ensureResolved(key)));
 
-    // reconcile 可重入。解析期间可能已经有新一轮跑完，陈旧的这一轮必须整体作废：
-    // 连 currentUnion 都不能写，否则新一轮算出的 added 会漏掉尚未首刷的资产
-    if (generation !== this.reconcileGeneration) return;
+    // reconcile 可重入，而且解析期间还可能跨过一次 suspend/resume。陈旧的这一轮必须
+    // 整体作废：连 currentUnion 都不能写，否则新一轮算出的 added 会漏掉尚未首刷的资产，
+    // 更不能在新一轮已经刷过之后再补一轮 REST
+    if (generation !== this.reconcileGeneration || regime !== this.regimeEpoch) return;
+
+    // 首刷责任是一次性的，取用后立刻清掉
+    const ownsFirstRefresh = this.enteredRealtimeDuringReconcile;
+    this.enteredRealtimeDuringReconcile = false;
 
     const added = [...union].filter((key) => !this.currentUnion.has(key));
     const removed = [...this.currentUnion].filter((key) => !union.has(key));
@@ -497,7 +514,7 @@ export class PriceService {
 
     // 首刷只有这一个 owner：进入 realtime 时刷整个 union，否则只刷新加入的资产。
     // 刚由 candidate 验证取到报价的资产会在 refreshTiers 里被跳过，不会重复打请求
-    const targets = this.enteredRealtimeDuringReconcile ? union : new Set(added);
+    const targets = ownsFirstRefresh ? union : new Set(added);
     if (targets.size > 0) void this.refreshAssets(targets).catch(() => {});
   }
 
@@ -521,7 +538,14 @@ export class PriceService {
 
   private onModeChange(mode: TransportMode, previous: TransportMode, ctx: ModeChangeContext): void {
     // off → 非 off 只是「开始干活」，没有旧 operation 需要作废；其余转换都是真的换 regime
-    if (!(previous === 'off' && mode !== 'off')) this.invalidateRegime();
+    if (!(previous === 'off' && mode !== 'off')) {
+      this.invalidateRegime();
+      // 跨过这次转换的 reconcile 已经作废，进入 PASSIVE 时没有别的入口会接手，
+      // 解析到一半的资产会卡在「有报价但没有 desired instrument」的半成品状态。
+      // OFF 由 onResume 接手，回到 REALTIME 由下面的分支自己刷，都不在这里重排
+      const passive = mode === 'passive-visible' || mode === 'passive-hidden';
+      if (passive && this.wanted.size > 0) this.scheduleReconcile();
+    }
 
     if (mode === 'realtime') {
       this.pool.setDesiredInstruments(this.desiredInstruments);
@@ -568,6 +592,11 @@ export class PriceService {
     return this.resolveRunCount;
   }
 
+  /** 某个资产此刻是否还留着未被消费的 resolution handoff */
+  __hasResolutionHandoffForTest(assetKey: AssetKey): boolean {
+    return this.resolutionHandoff.has(migrateAssetKey(assetKey));
+  }
+
   // ============ instrument 解析 ============
 
   /** 当前实际在用的那一层；effective tier 每轮由真实拿到的 fresh quote 决定 */
@@ -597,8 +626,10 @@ export class PriceService {
 
     const owner = this.ownerFor(assetKey);
     const pending = this.resolving.get(assetKey);
-    // 资产移除又重新加入、或 regime 换过之后，旧 resolver 的结果不能再交给新 owner
-    if (pending && pending.owner.assetEpoch === owner.assetEpoch) return pending.promise;
+    // 只有完整 owner 相同才能复用在飞的解析。只比 assetEpoch 的话，
+    // suspend 期间发出的旧 resolver 会被 resume 当成自己那一轮，
+    // 结果既不重新取价、又要等一个已经失效的 Promise
+    if (pending && sameOwner(pending.owner, owner)) return pending.promise;
 
     const entry: { owner: OperationOwner; promise: Promise<VenueInstrument[]> } = {
       owner,
@@ -649,8 +680,9 @@ export class PriceService {
 
     if (!this.ownsOperation(owner)) return [];
     this.resolved.set(assetKey, verified);
-    // 本轮试过的层（成功或失败）都不该被紧随其后的首刷重打一遍
-    this.resolutionHandoff.set(assetKey, { epoch: owner.assetEpoch, attempted, quotedTier });
+    // 本轮试过的层（成功或失败）都不该被紧随其后的首刷重打一遍。
+    // 证据绑定完整 owner：换了 regime 之后它就作废，不能拿来跳过 resume 那一轮
+    this.resolutionHandoff.set(assetKey, { owner, attempted, quotedTier });
     if (verified.length === 0) {
       this.unavailable.add(assetKey);
     } else {
@@ -661,11 +693,13 @@ export class PriceService {
   }
 
   /** 一次性取用 resolution 证据；owner 对不上说明是别人留下的，不能用 */
-  private takeResolutionHandoff(assetKey: AssetKey, epoch: number): ResolutionHandoff | null {
-    const handoff = this.resolutionHandoff.get(assetKey);
+  private takeResolutionHandoff(owner: OperationOwner): ResolutionHandoff | null {
+    const handoff = this.resolutionHandoff.get(owner.assetKey);
     if (!handoff) return null;
-    this.resolutionHandoff.delete(assetKey);
-    return handoff.epoch === epoch ? handoff : null;
+    // owner 对不上就原样留着：旧 regime 的 run 不能删掉新 regime 留下的证据
+    if (!sameOwner(handoff.owner, owner)) return null;
+    this.resolutionHandoff.delete(owner.assetKey);
+    return handoff;
   }
 
   /** 这一层能生成、但还没被验证进 resolved 的 candidate */
@@ -789,8 +823,10 @@ export class PriceService {
    * 每次 await 之后都要重新确认所有权，失效后既不发下一层请求也不写任何状态。
    */
   private async refreshTiers(owner: OperationOwner): Promise<void> {
+    // 先确认所有权，再碰 handoff：失效的 run 连读都不该读，更不能把它删掉
+    if (!this.ownsOperation(owner)) return;
     const assetKey = owner.assetKey;
-    const handoff = this.takeResolutionHandoff(assetKey, owner.assetEpoch);
+    const handoff = this.takeResolutionHandoff(owner);
 
     for (const tier of [1, 2, 3] as const) {
       if (!this.ownsOperation(owner)) return;
