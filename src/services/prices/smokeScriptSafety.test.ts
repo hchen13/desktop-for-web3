@@ -13,8 +13,11 @@ const source = fs.readFileSync(SMOKE_PATH, 'utf8');
 
 /** 执行或建议递归删除的特征；注释和错误文案里也不允许出现 */
 const RECURSIVE_DELETE_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
-  { name: 'rm -rf', pattern: /rm\s+-[a-zA-Z]*[rR]/ },
-  { name: 'rmSync recursive', pattern: /rmSync\s*\([^)]*recursive/s },
+  // 短选项（-rf / -R / -fr）与长选项（--recursive）要分开写，字符类吃不掉第二个连字符
+  { name: 'rm 短选项递归', pattern: /rm\s+-[a-zA-Z]*[rR]/ },
+  { name: 'rm 长选项递归', pattern: /rm\s+--recursive\b/ },
+  // fs.rm / fs.promises.rm / fs.rmSync / fs.rmdirSync 带 recursive 都是同一件事
+  { name: 'rm 系列调用带 recursive', pattern: /\b(rm|rmSync|rmdirSync)\s*\([^)]*recursive/s },
   { name: 'rmdirSync', pattern: /\brmdirSync\b/ },
   { name: 'fs.promises.rm', pattern: /fs\.promises\.rm\b/ },
   { name: 'rimraf', pattern: /\brimraf\b/ },
@@ -30,9 +33,14 @@ describe('smoke 脚本不得删除或建议删除任何目录', () => {
   it('门禁能识别违规输入', () => {
     const violating = [
       `fs.rmSync(PROFILE, { recursive: true, force: true });`,
-      `console.error('请先 rm -rf dist');`,
-      `// 出错时可以递归删除 profile 重试`,
+      `fs.rm(PROFILE, { recursive: true }, callback);`,
+      `await fs.promises.rm(PROFILE, { recursive: true });`,
+      `fs.rmdirSync(PROFILE, { recursive: true });`,
       `execSync('rimraf ' + PROFILE);`,
+      `console.error('请先 rm -rf dist');`,
+      `console.error('可以 rm -R dist 之后重来');`,
+      `// 出错时执行 rm --recursive --force 清掉 profile`,
+      `// 出错时可以递归删除 profile 重试`,
     ];
     for (const sample of violating) {
       const hit = RECURSIVE_DELETE_PATTERNS.some((rule) => rule.pattern.test(sample));
