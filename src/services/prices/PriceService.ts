@@ -162,6 +162,7 @@ export class PriceService {
     hasWork: () => this.wanted.size > 0,
     onModeChange: (mode, previous, ctx) => this.onModeChange(mode, previous, ctx),
     onPassiveTick: () => {
+      this.scheduleReconcile();
       void this.refreshAssets().catch(() => {});
     },
     onResume: () => {
@@ -298,6 +299,7 @@ export class PriceService {
   /** transport regime 真的换了：所有跨越这次转换的在飞操作立即失效 */
   private invalidateRegime(): void {
     this.regimeEpoch += 1;
+    this.enteredRealtimeDuringReconcile = false;
   }
 
   /** 对指定 AssetKey（默认为当前 active union）立即做一次 targeted 刷新 */
@@ -540,14 +542,18 @@ export class PriceService {
     // off → 非 off 只是「开始干活」，没有旧 operation 需要作废；其余转换都是真的换 regime
     if (!(previous === 'off' && mode !== 'off')) {
       this.invalidateRegime();
-      // 跨过这次转换的 reconcile 已经作废，进入 PASSIVE 时没有别的入口会接手，
-      // 解析到一半的资产会卡在「有报价但没有 desired instrument」的半成品状态。
-      // OFF 由 onResume 接手，回到 REALTIME 由下面的分支自己刷，都不在这里重排
-      const passive = mode === 'passive-visible' || mode === 'passive-hidden';
-      if (passive && this.wanted.size > 0) this.scheduleReconcile();
     }
 
     if (mode === 'realtime') {
+      const returningFromPassive = previous === 'passive-visible' || previous === 'passive-hidden';
+      if (
+        returningFromPassive &&
+        this.wanted.size > 0 &&
+        !this.reconciling &&
+        !this.reconcileScheduled
+      ) {
+        this.scheduleReconcile();
+      }
       this.pool.setDesiredInstruments(this.desiredInstruments);
       this.startUncoveredTimer();
       this.scheduleRecovery();

@@ -9,7 +9,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PriceService } from './PriceService';
 import { exchangeCatalog, EXCHANGE_CATALOG_STORAGE_KEY } from './exchangeCatalog';
-import { BLUR_GRACE_MS, HIDDEN_GRACE_MS, PASSIVE_VISIBLE_INTERVAL_MS } from './lifecycle';
+import {
+  BLUR_GRACE_MS,
+  HIDDEN_GRACE_MS,
+  PASSIVE_HIDDEN_INTERVAL_MS,
+  PASSIVE_VISIBLE_INTERVAL_MS,
+} from './lifecycle';
 import { __setReconnectJitterForTest, __setWebSocketFactoryForTest } from './socket';
 import type { AssetKey, VenueInstrument } from './types';
 import { makeInstrument } from './venues/shared';
@@ -459,37 +464,153 @@ describe('L1b 旧 resolver 仍 pending 时的 suspend → resume', () => {
 });
 
 describe('L1d 作废的 reconcile 必须有人接管', () => {
-  it('冷启动 reconcile 跨过 REALTIME → PASSIVE_VISIBLE 后，资产不能被搁在半路', async () => {
+  async function expectHandoffAtFirstPassiveTick(
+    transition: () => void,
+    interval: number,
+    expectedMode: 'passive-visible' | 'passive-hidden',
+  ): Promise<void> {
     gateOn = true;
-    mockVenues({ gated: () => gateOn, live: () => ['XAAPL-USDT'] });
+    let price = '100';
+    mockVenues({
+      gated: () => gateOn,
+      live: () => ['XAAPL-USDT'],
+      price: () => price,
+    });
 
     service.subscribe(new Set<AssetKey>(['stock:AAPL']), () => {});
     await flush();
     expect(records).toHaveLength(3);
+    expect(service.__resolveRunCountForTest()).toBe(1);
 
-    // 解析还没落地就掉进 PASSIVE_VISIBLE：这一轮 reconcile 跨过了 regime 变化
-    focused = false;
-    window.dispatchEvent(new Event('blur'));
-    vi.advanceTimersByTime(BLUR_GRACE_MS);
-    expect(service.__transportModeForTest()).toBe('passive-visible');
+    transition();
+    await flush();
+    expect(service.__transportModeForTest()).toBe(expectedMode);
+    expect(records).toHaveLength(3);
+
+    await vi.advanceTimersByTimeAsync(interval - 1);
+    await flush();
+    expect(records).toHaveLength(3);
 
     gateOn = false;
-    releaseAll();
+    price = '200';
+    await vi.advanceTimersByTimeAsync(1);
+    await flush();
+    expect(records).toHaveLength(6);
+    expect(service.__resolveRunCountForTest()).toBe(2);
     await service.__settleForTest();
-    await vi.advanceTimersByTimeAsync(PASSIVE_VISIBLE_INTERVAL_MS);
-    await service.__settleForTest();
-
-    // 作废的那一轮不能把资产留在「已解析但没有 desired」的半成品状态
-    expect(service.getSnapshot('stock:AAPL')!.price).toBe(300);
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(200);
     expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual([
       'XAAPL-USDT',
     ]);
 
-    focused = true;
-    window.dispatchEvent(new Event('focus'));
+    price = '100';
+    releaseAll();
+    await flush();
     await service.__settleForTest();
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(200);
+    expect(records).toHaveLength(6);
+    expect(service.__resolveRunCountForTest()).toBe(2);
+    expect(FakeSocket.openCount()).toBe(0);
+  }
+
+  it('REALTIME → PASSIVE_VISIBLE 等满 60 秒才接管冷启动 resolver', async () => {
+    await expectHandoffAtFirstPassiveTick(
+      () => {
+        focused = false;
+        window.dispatchEvent(new Event('blur'));
+        vi.advanceTimersByTime(BLUR_GRACE_MS);
+      },
+      PASSIVE_VISIBLE_INTERVAL_MS,
+      'passive-visible',
+    );
+  });
+
+  it('REALTIME → PASSIVE_HIDDEN 等满 5 分钟才接管冷启动 resolver', async () => {
+    await expectHandoffAtFirstPassiveTick(
+      () => {
+        visibility = 'hidden';
+        document.dispatchEvent(new Event('visibilitychange'));
+        vi.advanceTimersByTime(HIDDEN_GRACE_MS);
+      },
+      PASSIVE_HIDDEN_INTERVAL_MS,
+      'passive-hidden',
+    );
+  });
+
+  async function expectHandoffWhenRealtimeReturns(
+    enterPassive: () => void,
+    returnToRealtime: () => void,
+    expectedPassiveMode: 'passive-visible' | 'passive-hidden',
+  ): Promise<void> {
+    gateOn = true;
+    let price = '100';
+    mockVenues({
+      gated: () => gateOn,
+      live: () => ['XAAPL-USDT'],
+      price: () => price,
+    });
+
+    service.subscribe(new Set<AssetKey>(['stock:AAPL']), () => {});
+    await flush();
+    expect(records).toHaveLength(3);
+    expect(service.__resolveRunCountForTest()).toBe(1);
+
+    enterPassive();
+    await flush();
+    expect(service.__transportModeForTest()).toBe(expectedPassiveMode);
+    expect(records).toHaveLength(3);
+
+    gateOn = false;
+    price = '200';
+    returnToRealtime();
+    await flush(12);
     expect(service.__transportModeForTest()).toBe('realtime');
+    expect(records).toHaveLength(6);
+    expect(service.__resolveRunCountForTest()).toBe(2);
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(200);
+    expect(service.__desiredInstrumentsForTest().map((i) => i.instrumentId)).toEqual([
+      'XAAPL-USDT',
+    ]);
     expect(FakeSocket.openCount()).toBe(1);
+
+    price = '100';
+    releaseAll();
+    await flush();
+    await service.__settleForTest();
+    expect(service.getSnapshot('stock:AAPL')!.price).toBe(200);
+    expect(records).toHaveLength(6);
+    expect(service.__resolveRunCountForTest()).toBe(2);
+    expect(FakeSocket.openCount()).toBe(1);
+  }
+
+  it('PASSIVE_VISIBLE 首个 tick 前回到 REALTIME 会立即接管冷启动 resolver', async () => {
+    await expectHandoffWhenRealtimeReturns(
+      () => {
+        focused = false;
+        window.dispatchEvent(new Event('blur'));
+        vi.advanceTimersByTime(BLUR_GRACE_MS);
+      },
+      () => {
+        focused = true;
+        window.dispatchEvent(new Event('focus'));
+      },
+      'passive-visible',
+    );
+  });
+
+  it('PASSIVE_HIDDEN 首个 tick 前回到 REALTIME 会立即接管冷启动 resolver', async () => {
+    await expectHandoffWhenRealtimeReturns(
+      () => {
+        visibility = 'hidden';
+        document.dispatchEvent(new Event('visibilitychange'));
+        vi.advanceTimersByTime(HIDDEN_GRACE_MS);
+      },
+      () => {
+        visibility = 'visible';
+        document.dispatchEvent(new Event('visibilitychange'));
+      },
+      'passive-hidden',
+    );
   });
 });
 
