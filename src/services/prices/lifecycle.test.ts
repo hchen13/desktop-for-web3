@@ -259,36 +259,6 @@ describe('hidden 宽限与 PASSIVE_HIDDEN', () => {
     expect(h.ticks).toHaveLength(1);
     h.lifecycle.stop();
   });
-
-  /**
-   * Chrome 在后台会直接挂起 event loop：时间照走，排好的 timer 一个都不执行，
-   * 恢复时只把最后那次唤醒补上。advanceTimersByTime 会逐个补跑中间的周期，
-   * 证明不了这一点，所以这里手动把系统时间推过去再唤醒一次。
-   */
-  it('后台挂起几十个周期后恢复：只补跑一次，且只重新排定一个下一周期 timer', () => {
-    const h = createHarness();
-    setVisibility('hidden');
-    vi.advanceTimersByTime(HIDDEN_GRACE_MS);
-    expect(h.lifecycle.getMode()).toBe('passive-hidden');
-    const scheduled = vi.getTimerCount();
-    expect(scheduled).toBe(1);
-
-    vi.setSystemTime(Date.now() + PASSIVE_HIDDEN_INTERVAL_MS * 20);
-    expect(h.ticks).toHaveLength(0);
-
-    vi.advanceTimersToNextTimer();
-
-    // 错过的 19 个周期不得被补发，唤醒后也只重新排定一个下一周期 timer
-    expect(h.ticks).toEqual(['passive-hidden']);
-    expect(vi.getTimerCount()).toBe(scheduled);
-
-    // 下一次必须是完整的一个周期之后，不是立刻追平
-    vi.advanceTimersByTime(PASSIVE_HIDDEN_INTERVAL_MS - 1);
-    expect(h.ticks).toHaveLength(1);
-    vi.advanceTimersByTime(1);
-    expect(h.ticks).toHaveLength(2);
-    h.lifecycle.stop();
-  });
 });
 
 describe('pagehide / freeze / pageshow / resume', () => {

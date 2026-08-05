@@ -191,7 +191,12 @@ describe('visible + blurred 宽限', () => {
     const socket = FakeSocket.instances[0];
 
     setFocus(false);
-    vi.advanceTimersByTime(BLUR_GRACE_MS - 1000);
+    // 真实连接在宽限期里一直有入站帧；完全静默的连接由 liveness watchdog 单独负责
+    const step = 30_000;
+    for (let elapsed = 0; elapsed < BLUR_GRACE_MS - 1000; elapsed += step) {
+      vi.advanceTimersByTime(Math.min(step, BLUR_GRACE_MS - 1000 - elapsed));
+      socket.onmessage?.({ data: 'pong' });
+    }
 
     expect(service.__transportModeForTest()).toBe('realtime');
     expect(socket.closed).toBe(false);

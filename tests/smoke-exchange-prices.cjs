@@ -1,10 +1,12 @@
 /**
  * 行情链路真实验收：公共 REST 冒烟 + 打包后的 MV3 扩展行为断言。
  *
- * 与 diagnostic-* 脚本的区别：这里每一项都是断言，任何一条不通过就以非零退出码结束，
- * 可以直接挂到 CI 上。
+ * 与 diagnostic-* 脚本的区别：这里每一项都是断言，任何一条不通过就以非零退出码结束。
  *
- * 用法：rm -rf dist && npm run build && node tests/smoke-exchange-prices.cjs
+ * 它需要真实公网和 headful Chrome，因此是手动门禁，不并入普通 CI；确定性的那部分
+ * （禁止全市场请求、生命周期、请求预算）都在 Vitest 里。
+ *
+ * 用法：npm run build && npm run test:smoke
  */
 const { chromium } = require('playwright');
 const path = require('path');
@@ -15,8 +17,8 @@ const SRC = path.resolve(__dirname, '..', 'src');
 const PROFILE = path.resolve(__dirname, 'playwright-profile-smoke');
 
 /**
- * 复用固定的测试 profile。仓库 AGENTS.md 禁止未经确认的递归删除，所以这里绝不
- * 自动 rm -rf；fresh storage 由扩展页面里的 chrome.storage.local.clear() 建立。
+ * 复用固定的测试 profile。本脚本从不删除、清空或重建 profile；
+ * fresh storage 一律由扩展页面里的 chrome.storage.local.clear() 建立。
  */
 function ensureProfileUsable() {
   if (!fs.existsSync(PROFILE)) return;
@@ -54,25 +56,53 @@ function check(name, condition, detail) {
 
 const QUOTE_HOSTS = /^https:\/\/(www\.okx\.com|api\.bitget\.com|data-api\.binance\.vision|fapi\.binance\.com|api\.hyperliquid\.xyz)\//;
 
-/** 交易所侧的无 symbol ticker */
-const FULL_MARKET_URL_PATTERNS = [
-  /\/api\/v5\/market\/tickers\?instType=/,
-  /\/api\/v3\/market\/tickers\?category=[^&]*$/,
-  /\/api\/v3\/ticker\/24hr$/,
-  /\/fapi\/v1\/ticker\/24hr$/,
-  /\/api\/v3\/ticker\/price$/,
-];
-
 /** Hyperliquid 的全市场价格查询复用同一个 /info URL，只能看 POST body */
-const FULL_MARKET_BODY_PATTERNS = [
-  /"type"\s*:\s*"allMids"/,
-  /"type"\s*:\s*"metaAndAssetCtxs"/,
-  /"type"\s*:\s*"spotMetaAndAssetCtxs"/,
-];
+const HYPERLIQUID_FULL_MARKET_TYPES = new Set([
+  'allMids',
+  'metaAndAssetCtxs',
+  'spotMetaAndAssetCtxs',
+]);
 
+function hasValue(params, name) {
+  const value = params.get(name);
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * 用 URL / searchParams / POST body 结构化判定，而不是匹配 URL 字符串：
+ * 查询参数重排、换行或多带几个合法参数都不能绕过。
+ */
 function isFullMarket(record) {
-  if (FULL_MARKET_URL_PATTERNS.some((re) => re.test(record.url))) return true;
-  return FULL_MARKET_BODY_PATTERNS.some((re) => re.test(record.body || ''));
+  let url;
+  try {
+    url = new URL(record.url);
+  } catch {
+    return false;
+  }
+  const params = url.searchParams;
+  const path = url.pathname;
+
+  if (path === '/api/v5/market/tickers') return !hasValue(params, 'instId');
+  if (path === '/api/v3/market/tickers' && url.host === 'api.bitget.com') {
+    return !hasValue(params, 'symbol');
+  }
+  if (path === '/api/v3/ticker/24hr' || path === '/fapi/v1/ticker/24hr') {
+    return !hasValue(params, 'symbol') && !hasValue(params, 'symbols');
+  }
+  if (path === '/api/v3/ticker/price') return !hasValue(params, 'symbol') && !hasValue(params, 'symbols');
+  if (url.host === 'api.hyperliquid.xyz') {
+    try {
+      const payload = JSON.parse(record.body || '{}');
+      if (HYPERLIQUID_FULL_MARKET_TYPES.has(payload.type)) return true;
+      // 定向价格查询必须带明确 coin
+      if (payload.type === 'l2Book' || payload.type === 'activeAssetCtx') {
+        return !payload.coin;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 function describeRecord(record) {
@@ -419,7 +449,7 @@ async function extensionSmoke() {
 
 (async () => {
   if (!fs.existsSync(path.join(DIST, 'manifest.json'))) {
-    console.error('dist/ 不存在，先执行 rm -rf dist && npm run build');
+    console.error('dist/ 不存在，请先执行 npm run build，再执行 npm run test:smoke');
     process.exit(1);
   }
   try {

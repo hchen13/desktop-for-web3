@@ -28,11 +28,25 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const RECONNECT_JITTER = 0.3;
 
+/**
+ * 连接在这段时间内一条入站帧都没有就判定为哑连接。
+ *
+ * socket 停在 OPEN 但不再推送是最难发现的一种断线：readyState 正常、onclose 不触发，
+ * 行情却已经停了。窗口取 REALTIME 的新鲜度窗口——超过它报价本来就不能再算 live。
+ */
+export const WS_LIVENESS_TIMEOUT_MS = 3 * 60_000;
+
 let webSocketFactory: WebSocketFactory | null = null;
+let reconnectJitter = RECONNECT_JITTER;
 
 /** 仅供测试注入假 WebSocket */
 export function __setWebSocketFactoryForTest(factory: WebSocketFactory | null): void {
   webSocketFactory = factory;
+}
+
+/** 仅供测试固定退避抖动，让重连时刻可断言 */
+export function __setReconnectJitterForTest(value: number | null): void {
+  reconnectJitter = value ?? RECONNECT_JITTER;
 }
 
 function createSocket(url: string): WebSocket | null {
@@ -55,6 +69,9 @@ class EndpointConnection {
   private subscribed = new Set<string>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private livenessTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 最近一次收到任意入站帧的时间；pong 也算，它证明的是连接活性而不是行情新鲜度 */
+  private lastFrameAt = 0;
   private attempt = 0;
   private closedByUs = false;
 
@@ -132,6 +149,7 @@ class EndpointConnection {
     const socket = createSocket(this.endpoint.url);
     if (!socket) return;
     this.socket = socket;
+    this.lastFrameAt = Date.now();
 
     socket.onopen = () => {
       this.attempt = 0;
@@ -141,9 +159,12 @@ class EndpointConnection {
         for (const i of this.desired) this.subscribed.add(i.instrumentId);
       }
       this.startHeartbeat();
+      this.armLiveness(WS_LIVENESS_TIMEOUT_MS);
     };
 
     socket.onmessage = (event: MessageEvent) => {
+      // 收到字节就说明连接还活着，哪怕是 pong 或解析不了的帧
+      this.lastFrameAt = Date.now();
       try {
         const quotes = this.endpoint.parseMessage(String(event.data), this.desired);
         if (quotes.length > 0) this.onQuotes(quotes);
@@ -158,6 +179,7 @@ class EndpointConnection {
 
     socket.onclose = () => {
       this.stopHeartbeat();
+      this.stopLiveness();
       this.socket = null;
       this.subscribed.clear();
       if (this.closedByUs || this.desired.length === 0) return;
@@ -168,7 +190,7 @@ class EndpointConnection {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
     const backoff = Math.min(RECONNECT_BASE_MS * 2 ** this.attempt, RECONNECT_MAX_MS);
-    const jitter = backoff * RECONNECT_JITTER * (Math.random() * 2 - 1);
+    const jitter = backoff * reconnectJitter * (Math.random() * 2 - 1);
     this.attempt += 1;
     this.reconnectTimer = setTimeout(
       () => {
@@ -177,6 +199,58 @@ class EndpointConnection {
       },
       Math.max(RECONNECT_BASE_MS / 2, backoff + jitter),
     );
+  }
+
+  /**
+   * 静默连接看门狗。socket 停在 OPEN 却不再推任何帧时 onclose 永远不会触发，
+   * 只能靠「多久没收到帧」自己判定，然后主动断开走既有退避重连。
+   */
+  private armLiveness(delay: number): void {
+    if (this.livenessTimer) {
+      clearTimeout(this.livenessTimer);
+      this.livenessTimer = null;
+    }
+    this.livenessTimer = setTimeout(
+      () => {
+        this.livenessTimer = null;
+        if (!this.socket) return;
+        const idle = Date.now() - this.lastFrameAt;
+        if (idle < WS_LIVENESS_TIMEOUT_MS) {
+          this.armLiveness(WS_LIVENESS_TIMEOUT_MS - idle);
+          return;
+        }
+        this.dropSilentConnection();
+      },
+      Math.max(1, delay),
+    );
+  }
+
+  private stopLiveness(): void {
+    if (this.livenessTimer) {
+      clearTimeout(this.livenessTimer);
+      this.livenessTimer = null;
+    }
+  }
+
+  private dropSilentConnection(): void {
+    const socket = this.socket;
+    this.stopLiveness();
+    this.stopHeartbeat();
+    this.socket = null;
+    this.subscribed.clear();
+    if (socket) {
+      // 先摘掉 handler 再关，避免 onclose 又排一次重连
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      try {
+        socket.close();
+      } catch {
+        /* 已经断开 */
+      }
+    }
+    if (this.desired.length > 0) this.scheduleReconnect();
   }
 
   private startHeartbeat(): void {
@@ -196,6 +270,7 @@ class EndpointConnection {
 
   private clearTimers(): void {
     this.stopHeartbeat();
+    this.stopLiveness();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
