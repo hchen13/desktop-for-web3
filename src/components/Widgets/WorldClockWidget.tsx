@@ -5,7 +5,7 @@
  * 支持右键菜单编辑城市
  */
 
-import { createSignal, createEffect, onMount, Show, For, Index } from 'solid-js';
+import { createSignal, createEffect, onMount, onCleanup, Show, For, Index } from 'solid-js';
 import { Portal } from '../layout/Portal';
 import { useContextMenu } from '../layout/ContextMenu';
 import type { ContextMenuItem } from '../layout/ContextMenu';
@@ -141,7 +141,7 @@ export const WorldClockWidget = (props: WorldClockWidgetProps) => {
     updateTimes();
     const interval = setInterval(updateTimes, 1000);
 
-    return () => clearInterval(interval);
+    onCleanup(() => clearInterval(interval));
   });
 
   createEffect(() => {

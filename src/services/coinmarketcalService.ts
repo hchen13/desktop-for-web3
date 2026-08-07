@@ -69,6 +69,8 @@ interface CoinMarketCalResponse {
 interface CachedEventsData {
   version: string;
   timestamp: number;
+  year: number;
+  month: number;
   eventsByDate: EventsByDate;
   events: Web3Event[];
 }
@@ -77,17 +79,17 @@ interface CachedEventsData {
  * CoinMarketCal 分类到事件类型的映射
  */
 const CATEGORY_TO_EVENT_TYPE: Record<string, eventType> = {
-  'Tokenomics': 'unlock',      // 代币经济相关
+  Tokenomics: 'unlock', // 代币经济相关
   'Airdrop/Snapshot': 'airdrop', // 空投
-  'Release': 'unlock',         // 发布/解锁
-  'Conference': 'conference',  // 会议
-  'Meetup': 'conference',      // 聚会
-  'AMA': 'conference',         // AMA
-  'Exchange': 'airdrop',       // 交易所相关（listing等）
-  'Upgrade': 'upgrade',        // 升级
-  'Team Update': 'upgrade',    // 团队更新
-  'Partnership': 'upgrade',    // 合作
-  'Other': 'upgrade',          // 其他
+  Release: 'unlock', // 发布/解锁
+  Conference: 'conference', // 会议
+  Meetup: 'conference', // 聚会
+  AMA: 'conference', // AMA
+  Exchange: 'airdrop', // 交易所相关（listing等）
+  Upgrade: 'upgrade', // 升级
+  'Team Update': 'upgrade', // 团队更新
+  Partnership: 'upgrade', // 合作
+  Other: 'upgrade', // 其他
 };
 
 /**
@@ -106,7 +108,7 @@ function convertToWeb3Event(event: CoinMarketCalEvent): Web3Event {
   const type = mapCategoryToEventType(category);
 
   // 获取关联币种符号
-  const coinSymbols = event.coins.map(c => c.symbol).join(', ');
+  const coinSymbols = event.coins.map((c) => c.symbol).join(', ');
 
   // 格式化标题（包含币种）
   const title = coinSymbols
@@ -134,7 +136,8 @@ function convertToWeb3Event(event: CoinMarketCalEvent): Web3Event {
   // 安全获取 description
   let description: string | undefined;
   if (event.description) {
-    description = event.description.en || event.description['en'] || Object.values(event.description)[0];
+    description =
+      event.description.en || event.description['en'] || Object.values(event.description)[0];
   }
 
   return {
@@ -175,11 +178,18 @@ function getCache(): CachedEventsData | null {
 /**
  * 写入 localStorage 缓存
  */
-function setCache(eventsByDate: EventsByDate, events: Web3Event[]): void {
+function setCache(
+  eventsByDate: EventsByDate,
+  events: Web3Event[],
+  year: number,
+  month: number,
+): void {
   try {
     const data: CachedEventsData = {
       version: CACHE_VERSION,
       timestamp: Date.now(),
+      year,
+      month,
       eventsByDate,
       events,
     };
@@ -194,7 +204,7 @@ function setCache(eventsByDate: EventsByDate, events: Web3Event[]): void {
  */
 function isCacheValid(cache: CachedEventsData): boolean {
   const now = Date.now();
-  return (now - cache.timestamp) < CACHE_TTL;
+  return now - cache.timestamp < CACHE_TTL;
 }
 
 /**
@@ -342,13 +352,13 @@ export function groupEventsByDate(events: Web3Event[]): EventsByDate {
  */
 export async function getEventsForAdjacentMonths(
   year: number,
-  month: number
+  month: number,
 ): Promise<EventsByDate> {
   // 尝试从缓存读取
   const cache = getCache();
 
   // 如果缓存存在且有效，直接返回
-  if (cache && isCacheValid(cache)) {
+  if (cache && isCacheValid(cache) && cache.year === year && cache.month === month) {
     console.log('[CoinMarketCal] Using cached data');
     return cache.eventsByDate;
   }
@@ -375,8 +385,10 @@ export async function getEventsForAdjacentMonths(
   const allEvents = [...currentMonthEvents, ...prevMonthEvents, ...nextMonthEvents];
   const eventsByDate = groupEventsByDate(allEvents);
 
-  // 写入缓存
-  setCache(eventsByDate, allEvents);
+  // 空结果多半来自网络失败（getCoinMarketCalEvents 吞掉异常返回空数组），不能缓存 24 小时
+  if (allEvents.length > 0) {
+    setCache(eventsByDate, allEvents, year, month);
+  }
 
   return eventsByDate;
 }

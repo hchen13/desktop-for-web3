@@ -133,7 +133,7 @@ export const NewsWidget = (props: NewsWidgetProps) => {
     if (DragSystem.justFinishedDrag()) {
       return;
     }
-    window.open(link, '_blank');
+    window.open(link, '_blank', 'noopener,noreferrer');
   };
 
   const statusLabel = () => {

@@ -261,6 +261,10 @@ class YieldsService {
     this.ensureBackgroundStarted();
     return () => {
       this.subscribers.delete(callback);
+      if (this.subscribers.size === 0 && this.refreshTimer) {
+        clearInterval(this.refreshTimer);
+        this.refreshTimer = null;
+      }
     };
   }
 

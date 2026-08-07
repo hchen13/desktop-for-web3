@@ -141,7 +141,7 @@ export const GridIcon = (props: GridIconProps) => {
       return;
     }
 
-    window.open(props.url, '_blank');
+    window.open(props.url, '_blank', 'noopener,noreferrer');
   };
 
   const handleRefreshClick = (e: MouseEvent) => {

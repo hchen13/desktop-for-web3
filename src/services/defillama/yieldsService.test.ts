@@ -262,4 +262,29 @@ describe('YieldsService — fetch + stale', () => {
     expect(a).not.toHaveBeenCalled();
     expect(b).toHaveBeenCalled();
   });
+
+  it('最后一个订阅者取消后停止后台轮询', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(
+          async () => new Response(JSON.stringify({ data: [] }), { status: 200 }),
+        );
+
+      const { yieldsService } = await import('./yieldsService');
+      yieldsService.__resetForTest();
+
+      const unsub = yieldsService.subscribe(vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+
+      unsub();
+      fetchSpy.mockClear();
+
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

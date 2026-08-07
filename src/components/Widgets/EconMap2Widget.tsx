@@ -2,7 +2,7 @@
  * EconMap2 Widget - 本地实现，使用 IMF DataMapper API
  */
 
-import { createMemo, createSignal, createEffect, Show, For } from 'solid-js';
+import { createMemo, createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
 import { feature } from 'topojson-client';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import worldAtlas from 'world-atlas/countries-110m.json';
@@ -94,6 +94,9 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
 
   createEffect(() => {
     let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
     setIsLoading(true);
 
     fetchEconMap2Data(metric())
@@ -104,10 +107,6 @@ export const EconMapWidget = (props: EconMapWidgetProps) => {
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
-
-    return () => {
-      cancelled = true;
-    };
   });
 
   const getCountryValue = (numericId: string | number): number | null => {

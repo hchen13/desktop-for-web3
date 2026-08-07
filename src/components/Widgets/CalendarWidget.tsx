@@ -9,7 +9,16 @@
  * - 集成 CoinMarketCal API 获取真实事件数据
  */
 
-import { createSignal, createEffect, createMemo, onMount, Show, For, Index } from 'solid-js';
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  onMount,
+  onCleanup,
+  Show,
+  For,
+  Index,
+} from 'solid-js';
 import { Portal } from '../layout/Portal';
 import { useContextMenu } from '../layout/ContextMenu';
 import type { ContextMenuItem } from '../layout/ContextMenu';
@@ -61,18 +70,18 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
   const [todayEvents, setTodayEvents] = createSignal<Web3Event[]>([]);
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  let refreshEpoch = 0;
 
   // ===== 初始化 =====
   onMount(() => {
-    // 加载真实事件数据
-    refreshEventsForCurrentMonth();
-
     // 默认使用完整视图
     setViewMode('full');
   });
 
   // 当年月变化时，刷新事件数据（包括相邻月份）
   const refreshEventsForCurrentMonth = async () => {
+    const requestEpoch = ++refreshEpoch;
+    const isCancelled = () => requestEpoch !== refreshEpoch;
     const year = currentYear();
     const month = currentMonth();
 
@@ -82,6 +91,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
     try {
       // 获取相邻三个月的事件数据
       const eventsByMonth = await getEventsForAdjacentMonths(year, month);
+      if (isCancelled()) return;
 
       // 提取今天的事件
       const today = new Date();
@@ -91,22 +101,28 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
       setEventsByDate(eventsByMonth);
       setTodayEvents(todayEventsList);
     } catch (err) {
+      if (isCancelled()) return;
       console.error('[CalendarWidget] Failed to load events:', err);
       setError(err instanceof Error ? err.message : '加载事件数据失败');
       // 发生错误时设置空数据
       setEventsByDate({});
       setTodayEvents([]);
     } finally {
-      setIsLoading(false);
+      if (!isCancelled()) setIsLoading(false);
     }
   };
 
-  // 监听年月变化
+  // 监听年月变化。缓存改为按年月绑定后每次翻月都会真的打网络，
+  // 迟到的旧月响应必须丢弃，否则会覆盖掉已经渲染出来的新月
   createEffect(() => {
-    // 追踪依赖以确保响应式更新
     currentYear();
     currentMonth();
-    refreshEventsForCurrentMonth();
+
+    onCleanup(() => {
+      // Invalidate the previous request before the next month request starts.
+      refreshEpoch += 1;
+    });
+    void refreshEventsForCurrentMonth();
   });
 
   // ===== 视图模式切换 =====
@@ -441,7 +457,7 @@ export const CalendarWidget = (props: CalendarWidgetProps = {}) => {
         label: '刷新事件数据',
         action: () => {
           clearCache();
-          refreshEventsForCurrentMonth();
+          void refreshEventsForCurrentMonth();
         },
       },
       {

@@ -306,4 +306,53 @@ describe('StablecoinsService — fetch + subscribe', () => {
     await stablecoinsService.refresh(true);
     expect(stablecoinsService.getData().status).toBe('error');
   });
+
+  it('最后一个订阅者取消后停止后台轮询', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(
+          async () => new Response(JSON.stringify({ peggedAssets: [] }), { status: 200 }),
+        );
+
+      const { stablecoinsService } = await import('./stablecoinsService');
+      stablecoinsService.__resetForTest();
+
+      const unsub = stablecoinsService.subscribe(vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+
+      unsub();
+      fetchSpy.mockClear();
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('重新订阅会重启后台轮询', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(
+          async () => new Response(JSON.stringify({ peggedAssets: [] }), { status: 200 }),
+        );
+
+      const { stablecoinsService } = await import('./stablecoinsService');
+      stablecoinsService.__resetForTest();
+
+      stablecoinsService.subscribe(vi.fn())();
+      const unsub = stablecoinsService.subscribe(vi.fn());
+      fetchSpy.mockClear();
+
+      await vi.advanceTimersByTimeAsync(61 * 1000);
+      expect(fetchSpy).toHaveBeenCalled();
+      unsub();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

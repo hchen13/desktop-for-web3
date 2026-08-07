@@ -382,7 +382,8 @@ function resolveIconHref(href: string, baseUrl: string): string {
 
 async function parseFaviconFromHtml(siteUrl: string): Promise<string[]> {
   try {
-    const fetched = await fetchTextFromSite(siteUrl, 'text/html');
+    // 只传 origin：path/query 可能含私有 token，而 fetchTextFromSite 失败时会转发给公共 CORS 代理
+    const fetched = await fetchTextFromSite(new URL(siteUrl).origin, 'text/html');
     if (!fetched) return [];
 
     const html = fetched.text;

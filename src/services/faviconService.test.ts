@@ -324,6 +324,29 @@ describe('iconCache.getCachedIconUrl', () => {
     );
   });
 
+  it('抓取站点 HTML 时只带 origin，书签的 path/query 不会流向公共 CORS 代理', async () => {
+    const requested: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL): Promise<FetchMockResponse> => {
+        const requestedUrl = String(input);
+        requested.push(requestedUrl);
+        return { ok: false, url: requestedUrl, text: async () => '' };
+      }),
+    );
+    mockImageLoader(() => null);
+
+    await detectBestIcon('https://intranet.corp.example/dashboard?token=SECRET123', {
+      ignoreBuiltin: true,
+    });
+
+    expect(requested.length).toBeGreaterThan(0);
+    for (const requestedUrl of requested) {
+      expect(requestedUrl).not.toContain('SECRET123');
+      expect(requestedUrl).not.toContain('dashboard');
+    }
+  });
+
   it('returns Google favicon fallback for a hostname with no cache', () => {
     const url = getCachedIconUrl('https://uniqueexample-xyz123.com');
     expect(url).toBe('https://www.google.com/s2/favicons?domain=uniqueexample-xyz123.com&sz=128');
