@@ -12,6 +12,7 @@ export interface WorkerRequest {
 export interface WorkerResponse<T = any> {
   success: boolean;
   data?: T;
+  metadata?: unknown;
   error?: {
     code: string;
     message: string;
@@ -75,17 +76,20 @@ export interface CoinMarketCapQuotesResponse {
     error_code: number;
     error_message: string | null;
   };
-  data: Record<string, {
-    id: number;
-    name: string;
-    symbol: string;
-    quote: {
-      USD: {
-        price: number;
-        volume_24h: number;
-        percent_change_24h: number;
-        market_cap: number;
+  data: Record<
+    string,
+    {
+      id: number;
+      name: string;
+      symbol: string;
+      quote: {
+        USD: {
+          price: number;
+          volume_24h: number;
+          percent_change_24h: number;
+          market_cap: number;
+        };
       };
-    };
-  }>;
+    }
+  >;
 }

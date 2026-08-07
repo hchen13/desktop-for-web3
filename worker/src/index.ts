@@ -10,6 +10,7 @@ import { executeDuneQuery, getDuneQueryResult } from './routes/dune';
 import { getGasOracle, getLatestBlock } from './routes/etherscan';
 import { getQuotes } from './routes/coinmarketcap';
 import { getEvents, getCategories, getCoins } from './routes/coinmarketcal';
+import { getMacroEvents } from './routes/wallstreetcn';
 import {
   getBlockTimeDelay,
   getGasPrice,
@@ -85,6 +86,8 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       response = await handleCoinMarketCapRoutes(request, cache);
     } else if (path.startsWith('/api/coinmarketcal')) {
       response = await handleCoinMarketCalRoutes(request, cache);
+    } else if (path.startsWith('/api/wallstreetcn')) {
+      response = await handleWallstreetcnRoutes(request, cache);
     } else if (path === '/health') {
       response = new Response(
         JSON.stringify({
@@ -301,6 +304,22 @@ async function handleCoinMarketCalRoutes(request: Request, cache: Cache | null):
     JSON.stringify({
       success: false,
       error: { code: 'NOT_FOUND', message: 'CoinMarketCal endpoint not found' },
+    }),
+    { status: 404, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+/** 处理 Wallstreetcn 宏观日历路由 */
+async function handleWallstreetcnRoutes(request: Request, cache: Cache | null): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname === '/api/wallstreetcn/calendar' && request.method === 'GET') {
+    return getMacroEvents(request, cache);
+  }
+
+  return new Response(
+    JSON.stringify({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Wallstreetcn endpoint not found' },
     }),
     { status: 404, headers: { 'Content-Type': 'application/json' } },
   );

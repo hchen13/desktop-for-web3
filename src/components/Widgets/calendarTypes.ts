@@ -11,15 +11,15 @@ export type CalendarViewMode = 'full' | 'compact';
 /**
  * 事件类型
  */
-export type eventType = 'unlock' | 'airdrop' | 'upgrade' | 'conference';
+export type eventType = 'unlock' | 'airdrop' | 'upgrade' | 'conference' | 'macro';
 
 /**
  * Web3 事件
  */
 export interface Web3Event {
   id: string;
-  date: string;        // YYYY-MM-DD
-  time?: string;       // HH:MM UTC (可选)
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:MM UTC (可选)
   title: string;
   type: eventType;
   description?: string;
@@ -37,7 +37,7 @@ export type EventsByDate = Record<string, Web3Event[]>;
  */
 export interface CalendarViewState {
   mode: CalendarViewMode;
-  currentMonth: number;    // 0-11
+  currentMonth: number; // 0-11
   currentYear: number;
   selectedDate: string | null;
 }
@@ -66,14 +66,20 @@ export const EVENT_TYPE_CONFIG = {
     color: 'var(--blue-main)',
     icon: '👥',
   },
+  macro: {
+    label: '重要宏观事件',
+    color: 'var(--purple-main, #9b87f5)',
+    icon: '📈',
+  },
 } as const;
 
 /**
  * 事件优先级排序（用于极简视图）
  */
 export const EVENT_PRIORITY: Record<eventType, number> = {
-  unlock: 1,      // 高财务影响
-  airdrop: 2,     // 高用户关注
-  upgrade: 3,     // 中等影响
-  conference: 4,  // 低直接影响
+  unlock: 1, // 高财务影响
+  airdrop: 2, // 高用户关注
+  upgrade: 3, // 中等影响
+  conference: 4, // 低直接影响
+  macro: 1, // 高市场影响
 } as const;

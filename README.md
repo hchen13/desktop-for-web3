@@ -95,7 +95,7 @@ npm run deploy
 | 组件 | 说明 | 尺寸 | 数据源 |
 |-----------|-------------|------|-------------|
 | 资讯组件 | Web3 新闻聚合 | 3×3 | RSS 订阅 |
-| 日历组件 | 行业事件日历 | 3×2 | CoinMarketCal |
+| 日历组件 | Crypto + 重要宏观事件日历 | 3×2 | CoinMarketCal V2 + Wallstreetcn |
 | 链监控组件 | 区块链指标监控 | 2×2 | RPC + DefiLlama |
 | 观察列表 | 价格实时跟踪 | 2×2 | Binance WebSocket |
 | 世界时钟 | 多时区时间显示 | 2×1 | 本地时间 |

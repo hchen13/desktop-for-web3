@@ -274,7 +274,7 @@ export function generateMockEvents(targetYear?: number, targetMonth?: number): W
   const todayStr = dateStr(today);
 
   // 检查今日是否已有事件，如果没有则添加
-  const hasTodayEvent = events.some(e => e.date === todayStr);
+  const hasTodayEvent = events.some((e) => e.date === todayStr);
   if (!hasTodayEvent) {
     // 今日添加2个事件
     events.push({
@@ -316,7 +316,10 @@ export function getEventsByDate(events: Web3Event[]): Record<string, Web3Event[]
 /**
  * 获取指定日期的事件
  */
-export function getEventsForDate(date: string, eventsByDate: Record<string, Web3Event[]>): Web3Event[] {
+export function getEventsForDate(
+  date: string,
+  eventsByDate: Record<string, Web3Event[]>,
+): Web3Event[] {
   return eventsByDate[date] || [];
 }
 
@@ -329,7 +332,7 @@ export function getTodayEvents(eventsByDate: Record<string, Web3Event[]>): Web3E
 
   // 按优先级排序
   return events.sort((a, b) => {
-    const priorityMap = { unlock: 1, airdrop: 2, upgrade: 3, conference: 4 };
+    const priorityMap = { unlock: 1, airdrop: 2, upgrade: 3, conference: 4, macro: 1 };
     return priorityMap[a.type] - priorityMap[b.type];
   });
 }

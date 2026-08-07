@@ -6,7 +6,7 @@
  * - 使用 Portal 渲染 tooltip，避免被父组件 overflow 裁剪
  * - 简化点击处理逻辑
  * - 使用统一的 ContextMenu 组件
- * - 集成 CoinMarketCal API 获取真实事件数据
+ * - 聚合 CoinMarketCal V2 与 Wallstreetcn 最高重要性宏观事件
  */
 
 import {

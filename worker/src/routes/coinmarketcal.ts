@@ -1,95 +1,70 @@
 /**
  * CoinMarketCal API 代理路由
- * 文档: https://coinmarketcal.com/en/doc/redoc
+ * 文档: https://coinmarketcal.com/developer/docs/events
  */
 
 import type { WorkerResponse } from '../types';
 import { getAPIKey } from '../utils/auth';
 import { getOrSetCache } from '../utils/cache';
 
-const COINMARKETCAL_API_BASE = 'https://developers.coinmarketcal.com/v1';
+const COINMARKETCAL_API_BASE = 'https://api.coinmarketcal.com/v2';
 
 /**
  * CoinMarketCal API 类型定义
  */
 export interface CoinMarketCalEvent {
-  id: number;
-  title: Record<string, string>; // { en: "...", ko: "...", ... }
+  id: string;
+  slug: string;
+  title: string;
+  description?: string | null;
+  date: string;
+  dateEnd?: string;
+  dateType?: 'date' | 'month' | 'quarter' | string;
+  isEstimated?: boolean;
+  displayedDate?: string;
+  categories?: string[];
   coins: Array<{
-    id: number;
-    name: string;
+    slug: string;
     symbol: string;
-  }>;
-  date_event: string;
-  displayed_date: string; // 推荐使用这个字段显示
-  can_occur_before: boolean;
-  categories: Array<{
-    id: number;
     name: string;
   }>;
-  proof: string; // 截图证明链接
-  source: string; // CoinMarketCal 详情页链接
-  created_date: string;
-  description: Record<string, string>;
-  percentage: number; // 合法性评分
-  vote_count: number;
-  is_trending: boolean;
-  is_popular: boolean;
-  trending_index?: number;
-  popular_index?: number;
-  influential_score?: number; // 0-10
-  catalyst_score?: number; // 0-10
-  confirmed_by_officials?: boolean;
-  alert_count?: number;
-  vote_history?: Array<{
-    date: string;
-    percent: number;
-  }>;
-  view_history?: Array<{
-    date: string;
-    count: number;
-  }>;
+  impact?: string | number | null;
+  impactSummary?: string | null;
+  sourceUrl?: string | null;
+  snapshotUrl?: string | null;
 }
 
 export interface CoinMarketCalCategory {
-  id: number;
+  id: string;
   name: string;
 }
 
 export interface CoinMarketCalCoin {
-  id: number;
+  slug: string;
   name: string;
   symbol: string;
 }
 
 export interface CoinMarketCalEventsResponse {
-  body: CoinMarketCalEvent[];
-  _metadata: {
-    max: number;
-    page: number;
-    page_count: number;
-    total_count: number;
-  };
-  status: {
-    error_code: number;
-    error_message: string;
+  data: CoinMarketCalEvent[];
+  meta?: {
+    total?: number;
+    limit?: number;
+    cursor?: string | null;
   };
 }
 
-export interface CoinMarketCalCategoriesResponse {
-  body: CoinMarketCalCategory[];
-  status: {
-    error_code: number;
-    error_message: string;
-  };
-}
+type CoinMarketCalCollectionResponse<T> = {
+  data?: T[];
+  meta?: Record<string, unknown>;
+  error?: { message?: string };
+};
 
-export interface CoinMarketCalCoinsResponse {
-  body: CoinMarketCalCoin[];
-  status: {
-    error_code: number;
-    error_message: string;
-  };
+function jsonResponse<T>(body: WorkerResponse<T>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 /**
@@ -113,24 +88,23 @@ export async function getEvents(
     showVotes?: boolean;
     translations?: string;
   },
-  cache: Cache | null
+  cache: Cache | null,
 ): Promise<Response> {
   try {
     const apiKey = getAPIKey('COINMARKETCAL');
 
     // 构建查询参数
     const searchParams = new URLSearchParams();
-    if (params.page) searchParams.append('page', params.page.toString());
-    if (params.max) searchParams.append('max', params.max.toString());
-    if (params.dateRangeStart) searchParams.append('dateRangeStart', params.dateRangeStart);
-    if (params.dateRangeEnd) searchParams.append('dateRangeEnd', params.dateRangeEnd);
+    // Keep the worker's public query contract stable while translating to V2.
+    if (params.page) {
+      console.warn('[CoinMarketCal] V2 uses cursor pagination; ignoring legacy page parameter');
+    }
+    if (params.max) searchParams.append('limit', Math.min(Math.max(params.max, 1), 100).toString());
+    if (params.dateRangeStart) searchParams.append('from', params.dateRangeStart);
+    if (params.dateRangeEnd) searchParams.append('to', params.dateRangeEnd);
     if (params.coins) searchParams.append('coins', params.coins);
     if (params.categories) searchParams.append('categories', params.categories);
     if (params.sortBy) searchParams.append('sortBy', params.sortBy);
-    if (params.showOnly) searchParams.append('showOnly', params.showOnly);
-    if (params.showViews) searchParams.append('showViews', params.showViews.toString());
-    if (params.showVotes) searchParams.append('showVotes', params.showVotes.toString());
-    if (params.translations) searchParams.append('translations', params.translations);
 
     const url = `${COINMARKETCAL_API_BASE}/events?${searchParams.toString()}`;
 
@@ -140,7 +114,7 @@ export async function getEvents(
         const cmcResponse = await fetch(url, {
           headers: {
             'x-api-key': apiKey,
-            'Accept': 'application/json',
+            Accept: 'application/json',
             'Accept-Encoding': 'gzip, deflate',
           },
         });
@@ -153,39 +127,32 @@ export async function getEvents(
         return cmcResponse;
       },
       { ttl: 300 }, // 5 分钟缓存
-      cache
+      cache,
     );
 
     const data: CoinMarketCalEventsResponse = await response.json();
-
-    if (data.status.error_code !== 0) {
-      const workerResponse: WorkerResponse = {
-        success: false,
-        error: {
-          code: 'COINMARKETCAL_API_ERROR',
-          message: data.status.error_message || 'CoinMarketCal API returned an error',
+    if (!Array.isArray(data.data)) {
+      return jsonResponse(
+        {
+          success: false,
+          error: {
+            code: 'COINMARKETCAL_API_ERROR',
+            message: 'CoinMarketCal V2 returned an invalid response',
+          },
+          timestamp: Date.now(),
         },
-        timestamp: Date.now(),
-      };
-
-      return new Response(JSON.stringify(workerResponse), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+        502,
+      );
     }
 
-    const workerResponse: WorkerResponse<CoinMarketCalEventsResponse['body']> = {
+    const workerResponse: WorkerResponse<CoinMarketCalEventsResponse['data']> = {
       success: true,
-      data: data.body,
-      metadata: data._metadata,
+      data: data.data,
+      metadata: data.meta,
       cached: response.headers.get('X-Cache-Status') === 'HIT',
       timestamp: Date.now(),
     };
-
-    return new Response(JSON.stringify(workerResponse), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(workerResponse);
   } catch (error) {
     console.error('[CoinMarketCal] Error getting events:', error);
 
@@ -208,10 +175,7 @@ export async function getEvents(
 /**
  * 获取分类列表
  */
-export async function getCategories(
-  request: Request,
-  cache: Cache | null
-): Promise<Response> {
+export async function getCategories(request: Request, cache: Cache | null): Promise<Response> {
   try {
     const apiKey = getAPIKey('COINMARKETCAL');
     const url = `${COINMARKETCAL_API_BASE}/categories`;
@@ -222,7 +186,7 @@ export async function getCategories(
         const cmcResponse = await fetch(url, {
           headers: {
             'x-api-key': apiKey,
-            'Accept': 'application/json',
+            Accept: 'application/json',
           },
         });
 
@@ -234,38 +198,33 @@ export async function getCategories(
         return cmcResponse;
       },
       { ttl: 3600 }, // 1 小时缓存
-      cache
+      cache,
     );
 
-    const data: CoinMarketCalCategoriesResponse = await response.json();
-
-    if (data.status.error_code !== 0) {
-      const workerResponse: WorkerResponse = {
-        success: false,
-        error: {
-          code: 'COINMARKETCAL_API_ERROR',
-          message: data.status.error_message || 'CoinMarketCal API returned an error',
+    const data: CoinMarketCalCollectionResponse<CoinMarketCalCategory> = await response.json();
+    if (!Array.isArray(data.data)) {
+      return jsonResponse(
+        {
+          success: false,
+          error: {
+            code: 'COINMARKETCAL_API_ERROR',
+            message: data.error?.message || 'Invalid response',
+          },
+          timestamp: Date.now(),
         },
-        timestamp: Date.now(),
-      };
-
-      return new Response(JSON.stringify(workerResponse), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+        502,
+      );
     }
 
-    const workerResponse: WorkerResponse<CoinMarketCalCategoriesResponse['body']> = {
+    const workerResponse: WorkerResponse<CoinMarketCalCategory[]> = {
       success: true,
-      data: data.body,
+      data: data.data,
+      metadata: data.meta,
       cached: response.headers.get('X-Cache-Status') === 'HIT',
       timestamp: Date.now(),
     };
 
-    return new Response(JSON.stringify(workerResponse), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(workerResponse);
   } catch (error) {
     console.error('[CoinMarketCal] Error getting categories:', error);
 
@@ -288,10 +247,7 @@ export async function getCategories(
 /**
  * 获取币种列表
  */
-export async function getCoins(
-  request: Request,
-  cache: Cache | null
-): Promise<Response> {
+export async function getCoins(request: Request, cache: Cache | null): Promise<Response> {
   try {
     const apiKey = getAPIKey('COINMARKETCAL');
     const url = `${COINMARKETCAL_API_BASE}/coins`;
@@ -302,7 +258,7 @@ export async function getCoins(
         const cmcResponse = await fetch(url, {
           headers: {
             'x-api-key': apiKey,
-            'Accept': 'application/json',
+            Accept: 'application/json',
           },
         });
 
@@ -314,38 +270,33 @@ export async function getCoins(
         return cmcResponse;
       },
       { ttl: 3600 }, // 1 小时缓存
-      cache
+      cache,
     );
 
-    const data: CoinMarketCalCoinsResponse = await response.json();
-
-    if (data.status.error_code !== 0) {
-      const workerResponse: WorkerResponse = {
-        success: false,
-        error: {
-          code: 'COINMARKETCAL_API_ERROR',
-          message: data.status.error_message || 'CoinMarketCal API returned an error',
+    const data: CoinMarketCalCollectionResponse<CoinMarketCalCoin> = await response.json();
+    if (!Array.isArray(data.data)) {
+      return jsonResponse(
+        {
+          success: false,
+          error: {
+            code: 'COINMARKETCAL_API_ERROR',
+            message: data.error?.message || 'Invalid response',
+          },
+          timestamp: Date.now(),
         },
-        timestamp: Date.now(),
-      };
-
-      return new Response(JSON.stringify(workerResponse), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+        502,
+      );
     }
 
-    const workerResponse: WorkerResponse<CoinMarketCalCoinsResponse['body']> = {
+    const workerResponse: WorkerResponse<CoinMarketCalCoin[]> = {
       success: true,
-      data: data.body,
+      data: data.data,
+      metadata: data.meta,
       cached: response.headers.get('X-Cache-Status') === 'HIT',
       timestamp: Date.now(),
     };
 
-    return new Response(JSON.stringify(workerResponse), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(workerResponse);
   } catch (error) {
     console.error('[CoinMarketCal] Error getting coins:', error);
 

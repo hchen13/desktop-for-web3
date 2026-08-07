@@ -15,7 +15,9 @@ function generateCacheKey(url: string, options?: CacheOptions): string {
   if (options?.key) {
     return options.key;
   }
-  return `api:${url}`;
+  // Cache API keys must be absolute URLs. The previous `api:${url}` prefix
+  // made the key invalid in both Miniflare and production Cache API.
+  return url;
 }
 
 /**
@@ -25,7 +27,7 @@ export async function getCached(cacheKey: string, cache: Cache | null): Promise<
   if (!cache) {
     return null;
   }
-  
+
   try {
     const cachedResponse = await cache.match(cacheKey);
     return cachedResponse;
@@ -42,27 +44,27 @@ export async function setCached(
   cacheKey: string,
   response: Response,
   options: CacheOptions,
-  cache: Cache | null
+  cache: Cache | null,
 ): Promise<void> {
   if (!cache) {
     return;
   }
-  
+
   try {
     // 创建可缓存的响应副本
     const cacheResponse = response.clone();
-    
+
     // 设置缓存头
     const headers = new Headers(cacheResponse.headers);
     headers.set('Cache-Control', `public, max-age=${options.ttl || 300}`);
     headers.set('X-Cached-At', new Date().toISOString());
-    
+
     const cachedResponse = new Response(cacheResponse.body, {
       status: cacheResponse.status,
       statusText: cacheResponse.statusText,
       headers,
     });
-    
+
     await cache.put(cacheKey, cachedResponse);
   } catch (error) {
     console.error('[Cache] Error setting cached data:', error);
@@ -76,10 +78,10 @@ export async function getOrSetCache(
   url: string,
   fetchFn: () => Promise<Response>,
   options: CacheOptions,
-  cache: Cache | null
+  cache: Cache | null,
 ): Promise<Response> {
   const cacheKey = generateCacheKey(url, options);
-  
+
   // 尝试从缓存获取
   const cached = await getCached(cacheKey, cache);
   if (cached) {
@@ -92,19 +94,19 @@ export async function getOrSetCache(
       headers,
     });
   }
-  
+
   // 缓存未命中，获取新数据
   const response = await fetchFn();
-  
+
   // 只缓存成功的响应
   if (response.ok) {
     await setCached(cacheKey, response, options, cache);
   }
-  
+
   // 添加缓存标识头
   const headers = new Headers(response.headers);
   headers.set('X-Cache-Status', 'MISS');
-  
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
